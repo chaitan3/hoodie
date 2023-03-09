@@ -1,0 +1,20 @@
+
+def tokenize(text):
+    return text.strip().lower().split(' ')
+
+def parse_text(text):
+    tokens = tokenize(text)
+    cmd = ""
+    args = []
+    if len(tokens) > 0:
+        cmd = tokens[0]
+    if len(tokens) > 1:
+        args = tokens[1:]
+    intent = {}
+    intent["command"] = cmd
+    intent["arguments"] = args
+    return intent
+
+if __name__ == "__main__":
+    text = "play bon jovi its my life"
+    parse_text(text)
