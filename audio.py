@@ -1,5 +1,8 @@
 import pyaudio
 import numpy as np
+import soundfile as sf
+import librosa
+from io import BytesIO
 
 form_1 = pyaudio.paFloat32
 chans = 1
@@ -17,10 +20,6 @@ input_stream = p.open(format=form_1, rate=device_samp_rate,
                     input_device_index=input_device, input=True, \
                     frames_per_buffer=chunk_size)
 
-output_stream = p.open(format=form_1, rate=device_samp_rate,
-                    channels=chans, \
-                    output_device_index=output_device, output=True,
-                    frames_per_buffer=chunk_size)
 
 def record_audio(samp_size):
     frames = []
@@ -30,10 +29,25 @@ def record_audio(samp_size):
     audio = np.concatenate(frames)
     return audio
 
-def play_audio(audio):
+def play_audio(audio, output_stream):
     for i in range(0, len(audio), chunk_size):
         data = audio[i:i+chunk_size].astype(np.float32).tobytes()
         output_stream.write(data)
+
+def record_audio_to_bytes():
+    audio_file = BytesIO()
+    sf.write(audio_file, record_audio(3), device_samp_rate, format="WAV")
+    audio_file.seek(0)
+    return audio_file
+
+def play_audio_from_bytes(audio):
+    audio_file = BytesIO(audio)
+    audio, wav_rate = sf.read(audio_file)
+    output_stream = p.open(format=form_1, rate=wav_rate,
+                    channels=audio.shape[1], \
+                    output_device_index=output_device, output=True,
+                    frames_per_buffer=chunk_size)
+    play_audio(audio, output_stream)
 
 if __name__ == "__main__":
     import librosa
