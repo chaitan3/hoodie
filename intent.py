@@ -1,3 +1,8 @@
+import string
+import regex as re
+
+def remove_punctuation(text):
+    return re.sub(r"\p{P}+", "", text)
 
 def tokenize(text):
     return text.strip().lower().split(' ')
@@ -7,7 +12,7 @@ def parse_text(text):
     cmd = ""
     args = []
     if len(tokens) > 0:
-        cmd = tokens[0]
+        cmd = remove_punctuation(tokens[0])
     if len(tokens) > 1:
         args = tokens[1:]
     intent = {}

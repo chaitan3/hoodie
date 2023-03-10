@@ -27,7 +27,7 @@ def record_audio(samp_size):
         data = input_stream.read(chunk_size, exception_on_overflow=False)
         frames.append(np.frombuffer(data, dtype=np.float32))
     audio = np.concatenate(frames)
-    return audio
+    return audio, device_samp_rate
 
 def play_audio(audio, output_stream):
     for i in range(0, len(audio), chunk_size):
@@ -36,15 +36,20 @@ def play_audio(audio, output_stream):
 
 def record_audio_to_bytes():
     audio_file = BytesIO()
-    sf.write(audio_file, record_audio(3), device_samp_rate, format="WAV")
+    audio, wav_rate = record_audio(3)
+    sf.write(audio_file, audio, wav_rate, format="WAV")
     audio_file.seek(0)
     return audio_file
 
-def play_audio_from_bytes(audio):
-    audio_file = BytesIO(audio)
+def play_audio_from_bytes(audio_bytes):
+    audio_file = BytesIO(audio_bytes)
     audio, wav_rate = sf.read(audio_file)
-    output_stream = p.open(format=form_1, rate=wav_rate,
-                    channels=audio.shape[1], \
+    chans = 1
+    if len(audio.shape) > 1:
+        chans = audio.shape[1]
+    audio = librosa.resample(audio, orig_sr=wav_rate, target_sr=device_samp_rate)
+    output_stream = p.open(format=form_1, rate=device_samp_rate,
+                    channels=chans, \
                     output_device_index=output_device, output=True,
                     frames_per_buffer=chunk_size)
     play_audio(audio, output_stream)
