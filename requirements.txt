@@ -1,6 +1,11 @@
 transformers
 datasets
 flask
+torch
+torchaudio
+speechbrain
+
+yt-dlp
 
 soundfile
 librosa

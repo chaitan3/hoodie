@@ -1,7 +1,6 @@
 import pyaudio
 import numpy as np
 import soundfile as sf
-import librosa
 from io import BytesIO
 
 fmt = pyaudio.paFloat32
@@ -60,6 +59,7 @@ def play_audio_from_bytes(audio_bytes):
                              output_channels=output_channels,
                              output_format=fmt)
     except ValueError:
+        import librosa
         audio = librosa.resample(audio, orig_sr=wav_rate, target_sr=output_samp_rate)
         rate = output_samp_rate
     assert p.is_format_supported(rate=rate,

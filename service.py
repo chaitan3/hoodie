@@ -33,4 +33,4 @@ def handler():
     return send_file(response, download_name="response.wav")
 
 if __name__ == "__main__":
-    app.run()
+    app.run("0.0.0.0")
