@@ -2,12 +2,15 @@ import subprocess
 import tempfile
 import soundfile as sf
 import os, shutil
+import uuid
 
 from tts import get_audio_from_text
 
-import uuid
 def cache_file(key):
-    return 'cache/' + str(uuid.uuid4())
+    cache_dir = "cache"
+    if not os.path.exists(cache_dir):
+        os.makedirs(cache_dir)
+    return os.path.join(cache_dir, str(uuid.uuid4()))
 
 def search_and_download_audio(key):
     name = cache_file(key) + ".wav"
