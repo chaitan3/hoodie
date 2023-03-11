@@ -1,6 +1,7 @@
 transformers
 datasets
+flask
+
 soundfile
 librosa
-flask
 pyaudio
