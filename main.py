@@ -18,8 +18,6 @@ def main():
         audio_file = BytesIO()
         record_audio_to_file(audio_file, listen_time)
         resp = send_audio_to_server(audio_file)
-        with open("test2.ogg", "wb") as f:
-            f.write(resp.content)
         play_audio_from_file(BytesIO(resp.content))
 
 if __name__ == "__main__":
