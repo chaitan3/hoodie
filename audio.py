@@ -4,16 +4,16 @@ import sounddevice as sd
 import time
 
 # desktop
-#input_device_name = "default:CARD=camera"
-#input_device_id = 10
-#output_device_id = 11
-#blocksize = 0
+input_device_name = "default:CARD=camera"
+input_device_id = 10
+output_device_id = 11
+blocksize = 0
 
 # raspi
-input_device_name = "sysdefault:CARD=Device"
-input_device_id = 1
-output_device_id = 0
-blocksize = 1024
+#input_device_name = "sysdefault:CARD=Device"
+#input_device_id = 1
+#output_device_id = 0
+#blocksize = 1024
 
 input_channels = 1
 input_samp_rate = 44100

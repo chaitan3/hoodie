@@ -7,7 +7,7 @@ import uuid
 from tts import get_audio_from_text
 
 def cache_file(key):
-    cache_dir = "cache"
+    cache_dir = os.path.join(os.getcwd(), "cache")
     if not os.path.exists(cache_dir):
         os.makedirs(cache_dir)
     return os.path.join(cache_dir, str(uuid.uuid4()))
