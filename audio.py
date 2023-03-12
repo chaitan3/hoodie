@@ -3,8 +3,6 @@ import soundfile as sf
 import sounddevice as sd
 import time
 
-dtype = np.float32
-
 # desktop
 #input_device_name = "default:CARD=camera"
 #input_device_id = 10
@@ -17,10 +15,11 @@ input_device_id = 1
 output_device_id = 0
 blocksize = 1024
 
-def record_audio_to_file(file_obj, samp_size=3):
-    input_channels = 1
-    input_samp_rate = 44100
+input_channels = 1
+input_samp_rate = 44100
+dtype = np.float32
 
+def record_audio_to_file(file_obj, samp_size=3):
     audio = sd.rec(device=input_device_id,
                    frames=samp_size * input_samp_rate,
                    samplerate=input_samp_rate,
