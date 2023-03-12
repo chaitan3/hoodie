@@ -1,7 +1,7 @@
 import subprocess
 import tempfile
+import os, shutil, glob
 import soundfile as sf
-import os, shutil
 import uuid
 
 from tts import get_audio_from_text
@@ -13,17 +13,17 @@ def cache_file(key):
     return os.path.join(cache_dir, str(uuid.uuid4()))
 
 def search_and_download_audio(key):
-    name = cache_file(key) + ".wav"
-    fmt = "wav"
-    cmd = f'yt-dlp --force-overwrite -f "ba" -x --audio-format {fmt} ytsearch1:"{key}" -o {name}'
+    name = cache_file(key)
+    cmd = f'yt-dlp --force-overwrite -f "ba" -x ytsearch1:"{key}" -o "{name}.%(ext)s"'
     subprocess.check_call(cmd, shell=True)
-    return name
+    file_name = glob.glob(name + ".*")[0]
+    return file_name, "audio/ogg"
 
 def save_audio(audio, samp_rate):
-    tmpFile = tempfile.NamedTemporaryFile(suffix='.wav')
-    sf.write(tmpFile, audio, samp_rate, format="WAV")
+    tmpFile = tempfile.NamedTemporaryFile(suffix='.ogg')
+    sf.write(tmpFile, audio, samp_rate, format="OGG", subtype="VORBIS")
     tmpFile.seek(0)
-    return tmpFile
+    return tmpFile, "audio/ogg"
 
 def perform_task(intent):
     cmd = intent["command"]
