@@ -4,12 +4,18 @@ import sounddevice as sd
 import time
 
 dtype = np.float32
+
+# desktop
 #input_device_name = "default:CARD=camera"
+#input_device_id = 10
+#output_device_id = 11
+#blocksize = 0
+
+# raspi
 input_device_name = "sysdefault:CARD=Device"
-input_device_id = 10
-#input_device_id = 1
-output_device_id = 11
-#output_device_id = 0
+input_device_id = 1
+output_device_id = 0
+blocksize = 1024
 
 def record_audio_to_file(file_obj, samp_size=3):
     input_channels = 1
@@ -36,7 +42,8 @@ def play_audio_from_file(file_obj):
         with sd.OutputStream(device=output_device_id, samplerate=audio_file.samplerate,
                            channels=audio_file.channels,
                            dtype=dtype,
-                           callback=callback) as ss:
+                           callback=callback,
+                           blocksize=blocksize) as ss:
             while ss.active:
                sd.sleep(int(0.1*1000))
 
@@ -54,8 +61,8 @@ if __name__ == "__main__":
     #from whisper import get_text_from_audio
     #print(get_text_from_audio(audio))
 
-    #play_audio_from_file('test2.ogg')
-    record_audio_to_file("sd.wav")
+    play_audio_from_file('test3.ogg')
+    #record_audio_to_file("sd.wav")
 
     #audio, wav_rate = librosa.load("audiofile10Seconds.wav")
     #audio = audio[:,0]
