@@ -1,11 +1,9 @@
-transformers
-datasets
-flask
 torch
+transformers
 speechbrain
+flask
 
 yt-dlp
 
 soundfile
-librosa
-pyaudio
+sounddevice

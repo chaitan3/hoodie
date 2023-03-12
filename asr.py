@@ -1,6 +1,4 @@
 from transformers import WhisperProcessor, WhisperForConditionalGeneration
-from datasets import load_dataset
-import librosa
 
 # load model and processor
 processor = WhisperProcessor.from_pretrained("openai/whisper-small.en")
@@ -9,6 +7,7 @@ model_samp_rate = 16000
 
 def get_text_from_audio(audio_data, samp_rate):
     if samp_rate != model_samp_rate:
+        import librosa
         audio_data = librosa.resample(audio_data, orig_sr=samp_rate, target_sr=model_samp_rate)
     input_features = processor(audio_data, sampling_rate=model_samp_rate, return_tensors="pt").input_features 
     predicted_ids = model.generate(input_features)
