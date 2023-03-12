@@ -30,9 +30,9 @@ def perform_task(intent):
     args = intent["arguments"]
     phrase = " ".join(args)
 
-    if cmd == "play":
+    if cmd == "play" and len(phrase) > 0:
         return search_and_download_audio(phrase)
-    elif cmd == "repeat":
+    elif cmd == "repeat" and len(phrase) > 0:
         return save_audio(*get_audio_from_text(phrase))
     else:
         return save_audio(*get_audio_from_text("sorry, could you please repeat?"))
