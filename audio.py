@@ -1,16 +1,20 @@
 import pyaudio
 import numpy as np
 import soundfile as sf
+import time
 
 fmt = pyaudio.paFloat32
-chunk_size = 1024
+chunk_size = 32768
 
-input_device_name = "default:CARD=camera"
+#input_device_name = "default:CARD=camera"
+input_device_name = "sysdefault:CARD=Device"
 input_channels = 1
-input_device_id = 10
+#input_device_id = 10
+input_device_id = 1
 input_samp_rate = 44100
 
-output_device_id = 11
+#output_device_id = 11
+output_device_id = 0
 output_samp_rate = 44100
 
 p = pyaudio.PyAudio()
@@ -41,11 +45,17 @@ def play_audio_from_file(file_obj):
                                  output_device=output_device_id,
                                  output_channels=output_channels,
                                  output_format=fmt)
+    def callback(in_data, frame_count, time_info, status):
+        data = audio_file.read(frames=frame_count, dtype=np.float32)
+        return (data, pyaudio.paContinue)
     output_stream = p.open(format=fmt, rate=wav_rate, \
                     channels=output_channels, \
-                    output_device_index=output_device_id, output=True)
-    for audio in audio_file.blocks(blocksize=chunk_size, dtype=np.float32):
-        output_stream.write(audio.tobytes())
+                    output_device_index=output_device_id, output=True,
+                    stream_callback=callback,
+                    frames_per_buffer=chunk_size)
+    while output_stream.is_active():
+        time.sleep(0.1)
+    output_stream.stop_stream()
     output_stream.close()
 
 if __name__ == "__main__":
@@ -62,6 +72,9 @@ if __name__ == "__main__":
     #soundfile.write("test.wav", audio, 16000)
     #from whisper import get_text_from_audio
     #print(get_text_from_audio(audio))
+
+    f = 'test.ogg'
+    play_audio_from_file(f)
 
     #audio, wav_rate = librosa.load("audiofile10Seconds.wav")
     #audio = audio[:,0]
