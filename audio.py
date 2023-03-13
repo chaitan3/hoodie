@@ -4,37 +4,33 @@ import sounddevice as sd
 import time
 
 # desktop
-input_device_name = "default:CARD=camera"
 input_device_id = 10
 output_device_id = 11
 blocksize = 0
 
 # raspi
-#input_device_name = "sysdefault:CARD=Device"
 #input_device_id = 1
 #output_device_id = 0
 #blocksize = 1024
 
 input_channels = 1
-input_samp_rate = 44100
-dtype = np.float32
+input_samp_rate = 16000
+input_dtype = np.float32
 
 def record_audio_to_file(file_obj, samp_size=3):
     audio = sd.rec(device=input_device_id,
                    frames=samp_size * input_samp_rate,
                    samplerate=input_samp_rate,
                    channels=input_channels,
-                   dtype=dtype)
+                   dtype=input_dtype)
     sd.wait()
     sf.write(file_obj, audio, input_samp_rate, format="WAV")
-    if hasattr(file_obj, "seek"):
-        file_obj.seek(0)
 
 def play_audio_from_file(file_obj):
     with sf.SoundFile(file_obj) as audio_file:
         dtype = np.float32
         def callback(outdata, frame_count, time, status):
-            data = audio_file.read(frame_count, dtype=dtype, out=outdata)
+            data = audio_file.read(frame_count, out=outdata, dtype=dtype)
             if (data.size != outdata.size):
                 outdata[data.shape[0]:,:].fill(0.0)
                 raise sd.CallbackStop()
