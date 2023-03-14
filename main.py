@@ -9,7 +9,7 @@ def send_audio_to_server(audio_file):
     #url = "http://localhost:5000"
     url = "https://hoodie.intern.farcry.pw"
 
-    return requests.post(f"{url}/receive_and_respond", files={'audio': audio_file})
+    return requests.post(f"{url}/query", files={'audio': audio_file})
 
 def main():
     listen_time = 2

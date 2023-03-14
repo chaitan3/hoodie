@@ -19,7 +19,8 @@ def search_and_download_audio(key):
     file_name = glob.glob(name + ".*")[0]
     return file_name, "audio/ogg"
 
-def save_audio(audio, samp_rate):
+def save_audio_from_text(phrase):
+    audio, samp_rate = get_audio_from_text(phrase)
     tmpFile = tempfile.NamedTemporaryFile(suffix='.ogg')
     sf.write(tmpFile, audio, samp_rate, format="OGG", subtype="VORBIS")
     tmpFile.seek(0)
@@ -33,6 +34,6 @@ def perform_task(intent):
     if cmd == "play" and len(phrase) > 0:
         return search_and_download_audio(phrase)
     elif cmd == "repeat" and len(phrase) > 0:
-        return save_audio(*get_audio_from_text(phrase))
+        return save_audio_from_text(phrase)
     else:
-        return save_audio(*get_audio_from_text("sorry, could you please repeat?"))
+        return save_audio_from_text("sorry, could you please repeat?")

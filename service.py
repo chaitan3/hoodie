@@ -6,14 +6,37 @@ import time
 
 from asr import get_text_from_audio, model_samp_rate
 from intent import parse_text
-from actions import perform_task
+from actions import perform_task, save_audio_from_text
 from logger import logging
 
 app = Flask(__name__)
 
-@app.route('/receive_and_respond', methods=['POST'])
-def handler():
-    audio_file = request.files["audio"]
+@app.route('/asr', methods=['POST'])
+def handler_asr():
+    audio_file = request.files.get("audio")
+    audio, samp_rate = sf.read(audio_file)
+    text = get_text_from_audio(audio, samp_rate)
+    return jsonify({"text": text})
+
+@app.route('/tts', methods=['POST', "GET"])
+def handler_tts():
+    text = request.values.get("text")
+    response, mimetype = save_audio_from_text(text)
+    return send_file(response, mimetype=mimetype)
+
+@app.route('/task', methods=['POST', "GET"])
+def handler_task():
+    try:
+        text = request.values.get("text")
+        intent = parse_text(text)
+    except KeyError:
+        intent = request.values.get("intent")
+    response, mimetype = perform_task(intent)
+    return send_file(response, mimetype=mimetype)
+
+@app.route('/query', methods=['POST'])
+def handler_query():
+    audio_file = request.files.get("audio")
     t1 = time.time()
     audio, samp_rate = sf.read(audio_file)
     t2 = time.time()
