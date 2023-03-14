@@ -7,15 +7,18 @@ import time
 input_device_id = 10
 output_device_id = 11
 blocksize = 0
+input_samp_rate = 16000
+input_channels = 1
 
 # raspi
 #input_device_id = 1
 #output_device_id = 0
-#blocksize = 1024
+#blocksize = 16384
+#input_samp_rate = 48000
+#input_channels = 1
+
 
 def record_audio_to_file(file_obj, samp_size=3):
-    input_channels = 1
-    input_samp_rate = 16000
     audio = sd.rec(device=input_device_id,
                    frames=samp_size * input_samp_rate,
                    samplerate=input_samp_rate,
