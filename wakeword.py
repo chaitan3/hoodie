@@ -19,7 +19,7 @@ def wait_for_wakeword():
         while True:
             audio, overflow = stream.read(frames=porcupine.frame_length)
             assert not overflow
-            audio = audio[:,0].copy()
+            audio = audio[:].copy()
             pcm = struct.unpack_from("h" * porcupine.frame_length, audio)
             res = porcupine.process(pcm)
             if res >= 0:
