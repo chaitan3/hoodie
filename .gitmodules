@@ -1,6 +1,3 @@
-[submodule "raven/rhasspy-silence"]
-	path = raven/rhasspy-silence
-	url = https://github.com/rhasspy/rhasspy-silence
-[submodule "raven/rhasspy-wake-raven"]
-	path = raven/rhasspy-wake-raven
-	url = https://github.com/rhasspy/rhasspy-wake-raven
+[submodule "porcupine"]
+	path = porcupine
+	url = https://GIT_URL/chaitan3/porcupine.git
