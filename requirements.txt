@@ -2,8 +2,11 @@ torch
 transformers
 speechbrain
 flask
-
+librosa
 yt-dlp
 
 soundfile
 sounddevice
+pvporcupine
+numpy
+scipy
