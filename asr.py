@@ -1,5 +1,7 @@
 from transformers import WhisperProcessor, WhisperForConditionalGeneration
 
+from logger import logging
+
 # load model and processor
 processor = WhisperProcessor.from_pretrained("openai/whisper-small.en")
 model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-small.en")
@@ -13,6 +15,7 @@ def get_text_from_audio(audio_data, samp_rate):
     input_features = processor(audio_data, sampling_rate=model_samp_rate, return_tensors="pt").input_features 
     predicted_ids = model.generate(input_features)
     transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)
+    logging.info(("Transcription:", transcription[0]))
     return transcription[0]
 
 if __name__ == "__main__":

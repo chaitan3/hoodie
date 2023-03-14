@@ -7,6 +7,7 @@ import time
 from asr import get_text_from_audio, model_samp_rate
 from intent import parse_text
 from actions import perform_task
+from logger import logging
 
 app = Flask(__name__)
 
@@ -22,13 +23,11 @@ def handler():
     t4 = time.time()
     response, mimetype = perform_task(intent)
     t5 = time.time()
-    print('TEXT:', text)
-    print('INTENT:', intent)
-    print("Timings:")
-    print("\tRead audio", t2-t1)
-    print("\tTranscribe", t3-t2)
-    print("\tParse", t4-t3)
-    print("\tPerform", t5-t4)
+    logging.info("Timings:")
+    logging.info(("Read audio", t2-t1))
+    logging.info(("Transcribe", t3-t2))
+    logging.info(("Parse", t4-t3))
+    logging.info(("Perform", t5-t4))
     return send_file(response, mimetype=mimetype)
 
 if __name__ == "__main__":

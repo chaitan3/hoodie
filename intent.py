@@ -1,6 +1,8 @@
 import string
 import regex as re
 
+from logger import logging
+
 def remove_punctuation(text):
     return re.sub(r"\p{P}+", "", text)
 
@@ -18,6 +20,7 @@ def parse_text(text):
     intent = {}
     intent["command"] = cmd
     intent["arguments"] = args
+    logging.info(("Intent:", intent))
     return intent
 
 if __name__ == "__main__":

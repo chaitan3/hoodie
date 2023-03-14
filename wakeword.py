@@ -1,5 +1,7 @@
 from audio import input_device_id
 from audio import input_samp_rate, input_channels
+from logger import logging
+
 import sounddevice as sd
 import soundfile as sf
 import pvporcupine
@@ -27,9 +29,9 @@ def wait_for_wakeword():
             pcm = struct.unpack_from("h" * porcupine.frame_length, audio)
             res = porcupine.process(pcm)
             if overflow:
-                print("Overflow detected on mic")
+                logging.warn("Overflow detected on mic")
             if res >= 0:
-                print("Detected wakeword", list(pvporcupine.KEYWORDS)[res])
+                logging.info(("Detected wakeword", list(pvporcupine.KEYWORDS)[res]))
                 break
     porcupine.delete()
 

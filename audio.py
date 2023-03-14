@@ -57,7 +57,8 @@ if __name__ == "__main__":
     #from whisper import get_text_from_audio
     #print(get_text_from_audio(audio))
 
-    play_audio_from_file('test3.ogg')
+    import sys
+    play_audio_from_file(sys.argv[1])
     #record_audio_to_file("sd.wav")
 
     #audio, wav_rate = librosa.load("audiofile10Seconds.wav")
