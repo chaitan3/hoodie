@@ -13,16 +13,14 @@ blocksize = 0
 #output_device_id = 0
 #blocksize = 1024
 
-input_channels = 1
-input_samp_rate = 16000
-input_dtype = np.float32
-
 def record_audio_to_file(file_obj, samp_size=3):
+    input_channels = 1
+    input_samp_rate = 16000
     audio = sd.rec(device=input_device_id,
                    frames=samp_size * input_samp_rate,
                    samplerate=input_samp_rate,
                    channels=input_channels,
-                   dtype=input_dtype)
+                   dtype=np.float32)
     sd.wait()
     sf.write(file_obj, audio, input_samp_rate, format="WAV")
 
@@ -38,8 +36,8 @@ def play_audio_from_file(file_obj):
                            channels=audio_file.channels,
                            dtype=dtype,
                            callback=callback,
-                           blocksize=blocksize) as ss:
-            while ss.active:
+                           blocksize=blocksize) as stream:
+            while stream.active:
                sd.sleep(int(0.1*1000))
 
 if __name__ == "__main__":
