@@ -17,14 +17,14 @@ def search_and_download_audio(key):
     cmd = f'yt-dlp --force-overwrite -f "ba" -x ytsearch1:"{key}" -o "{name}.%(ext)s"'
     subprocess.check_call(cmd, shell=True)
     file_name = glob.glob(name + ".*")[0]
-    return file_name, "audio/ogg"
+    return file_name
 
 def save_audio_from_text(phrase):
     audio, samp_rate = get_audio_from_text(phrase)
     tmpFile = tempfile.NamedTemporaryFile(suffix='.ogg')
     sf.write(tmpFile, audio, samp_rate, format="OGG", subtype="VORBIS")
     tmpFile.seek(0)
-    return tmpFile, "audio/ogg"
+    return tmpFile
 
 def perform_task(intent):
     cmd = intent["command"]
@@ -35,5 +35,7 @@ def perform_task(intent):
         return search_and_download_audio(phrase)
     elif cmd == "repeat" and len(phrase) > 0:
         return save_audio_from_text(phrase)
+    elif cmd == "stop":
+        return {"output": "stop"}
     else:
         return save_audio_from_text("sorry, could you please repeat?")

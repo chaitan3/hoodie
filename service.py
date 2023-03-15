@@ -31,8 +31,11 @@ def handler_task():
         intent = parse_text(text)
     except KeyError:
         intent = request.values.get("intent")
-    response, mimetype = perform_task(intent)
-    return send_file(response, mimetype=mimetype)
+    response = perform_task(intent)
+    if isinstance(response, dict):
+        return jsonify(response)
+    else:
+        return send_file(response, mimetype="audio/ogg")
 
 @app.route('/query', methods=['POST'])
 def handler_query():
@@ -44,14 +47,17 @@ def handler_query():
     t3 = time.time()
     intent = parse_text(text)
     t4 = time.time()
-    response, mimetype = perform_task(intent)
+    response = perform_task(intent)
     t5 = time.time()
     logging.info("Timings:")
     logging.info(("Read audio", t2-t1))
     logging.info(("Transcribe", t3-t2))
     logging.info(("Parse", t4-t3))
     logging.info(("Perform", t5-t4))
-    return send_file(response, mimetype=mimetype)
+    if isinstance(response, dict):
+        return jsonify(response)
+    else:
+        return send_file(response, mimetype="audio/ogg")
 
 if __name__ == "__main__":
     app.run("0.0.0.0")

@@ -1,39 +1,30 @@
-from audio import input_device_id
-from audio import input_samp_rate, input_channels
-from logger import logging
-
-import sounddevice as sd
-import soundfile as sf
-import pvporcupine
-
 import numpy as np
 import subprocess
 import sys
 import struct
+import pvporcupine
 
-def wait_for_wakeword():
-    #porcupine = pvporcupine.create(keywords=["alexa"])
-    porcupine = pvporcupine.create(keywords=pvporcupine.KEYWORDS)
-    ratio = input_samp_rate // porcupine.sample_rate
-    assert input_channels == 1
-    assert ratio * porcupine.sample_rate == input_samp_rate
-    with sd.InputStream(device=input_device_id,
-                       samplerate=input_samp_rate,
-                       channels=input_channels,
-                        dtype=np.int16) as stream:
+from logger import logging
+
+class WakewordDetector(object):
+    def __init__(self):
+        self.porcupine = pvporcupine.create(keywords=pvporcupine.KEYWORDS)
+
+    def detect(self, recorder):
+        ratio = recorder.sample_rate // self.porcupine.sample_rate
         audio = None
         while True:
-            frames = porcupine.frame_length * ratio
-            audio, overflow = stream.read(frames=frames)
+            frames = self.porcupine.frame_length * ratio
+            audio = recorder.read(frames=frames)
             audio = audio[::ratio].copy()
-            pcm = struct.unpack_from("h" * porcupine.frame_length, audio)
-            res = porcupine.process(pcm)
-            if overflow:
-                logging.warn("Overflow detected on mic")
+            pcm = struct.unpack_from("h" * self.porcupine.frame_length, audio)
+            res = self.porcupine.process(pcm)
             if res >= 0:
                 logging.info(("Detected wakeword", list(pvporcupine.KEYWORDS)[res]))
                 break
-    porcupine.delete()
+
+    def __del__(self):
+        self.porcupine.delete()
 
 if __name__ == "__main__":
     wait_for_wakeword()

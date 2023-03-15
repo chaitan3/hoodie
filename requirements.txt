@@ -8,5 +8,6 @@ yt-dlp
 soundfile
 sounddevice
 pvporcupine
+webrtcvad
 numpy
 scipy
