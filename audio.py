@@ -32,18 +32,6 @@ class AudioRecorder(object):
             while stream.active:
                sd.sleep(100)
 
-    def read(self, frames):
-        audio = []
-        total_frame_count = 0
-        def callback(indata, frame_count, time, status):
-            nonlocal total_frame_count, audio
-            audio.append(indata)
-            total_frame_count += frame_count
-            if total_frame_count > frames:
-                raise sd.CallbackStop()
-        self.read_callback(callback, 0)
-        return np.concatenate(audio)
-
     def write_file(self, file_obj, audio):
         sf.write(file_obj, audio, self.sample_rate, format="WAV")
 

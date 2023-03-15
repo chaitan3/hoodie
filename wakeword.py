@@ -6,11 +6,12 @@ import sounddevice as sd
 from logger import logging
 
 class WakewordDetector(object):
-    def __init__(self):
+    def __init__(self, recorder):
         self.porcupine = pvporcupine.create(keywords=pvporcupine.KEYWORDS)
+        self.recorder = recorder
 
-    def get_detector(self, sample_rate):
-        ratio = sample_rate // self.porcupine.sample_rate
+    def wait_detect(self):
+        ratio = self.recorder.sample_rate // self.porcupine.sample_rate
         frames = self.porcupine.frame_length * ratio
 
         def callback(indata, frame_count, time, status):
@@ -20,7 +21,7 @@ class WakewordDetector(object):
             if res >= 0:
                 logging.info(("Detected wakeword", list(pvporcupine.KEYWORDS)[res]))
                 raise sd.CallbackStop()
-        return callback, frames
+        self.recorder.read_callback(callback, frames)
 
     def __del__(self):
         self.porcupine.delete()

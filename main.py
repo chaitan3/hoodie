@@ -7,32 +7,30 @@ from wakeword import WakewordDetector
 from vad import VoiceActivityDetector
 from logger import logging
 
-min_listen_time = 2 #seconds
+min_record_time = 2 #seconds
 beep_file = "beep.ogg"
 #url = "http://localhost:5000/query"
 url = "https://hoodie.intern.farcry.pw/query"
 
 def main():
-    wakeword = WakewordDetector()
-    activity = VoiceActivityDetector()
     recorder = AudioRecorder()
+    wakeword = WakewordDetector(recorder)
+    voice_activity = VoiceActivityDetector(recorder)
     player = AudioPlayer()
     player.start()
 
     while True:
         try:
             logging.info("Waiting for wakeword")
-            recorder.read_callback(*wakeword.get_detector(recorder.sample_rate))
+            wakeword.wait_detect()
             player.queue(beep_file)
 
             logging.info("Recording audio")
-            frames = []
-            frames.append(recorder.read(min_listen_time * recorder.sample_rate))
-            # add frames
-            recorder.read_callback(*activity.get_detector(recorder.sample_rate))
+            audio = voice_activity.wait_active(min_record_time)
+            logging.info("Stopped recording audio")
 
             audio_file = BytesIO()
-            recorder.write_file(audio_file, np.concatenate(frames))
+            recorder.write_file(audio_file, audio)
             audio_file.seek(0)
 
             logging.info("Sending request to server")
