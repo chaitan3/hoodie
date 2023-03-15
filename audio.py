@@ -9,7 +9,7 @@ from logger import logging
 input_device_id = 10
 output_device_id = 11
 blocksize = 0
-input_samp_rate = 16000
+input_sample_rate = 16000
 input_channels = 1
 
 # raspi
@@ -21,53 +21,59 @@ input_channels = 1
 
 class AudioRecorder(object):
     def __init__(self):
-        self.sample_rate = input_samp_rate
-        self.stream = sd.InputStream(device=input_device_id,
-                       samplerate=input_samp_rate,
-                       channels=input_channels,
-                       dtype=np.int16)
-        self.stream.start()
+        self.sample_rate = input_sample_rate
+        
+    def read_callback(self, callback, frames):
+        with sd.InputStream(device=input_device_id, samplerate=self.sample_rate,
+                           channels=input_channels,
+                           dtype=np.int16,
+                           callback=callback,
+                           blocksize=frames) as stream:
+            while stream.active:
+               sd.sleep(100)
 
-    def read(self, frames=None, frame_time=None):
-        if frame_time is not None:
-            frames = int(frame_time * self.sample_rate)
-        audio, overflow = self.stream.read(frames=frames)
-        if overflow:
-            logging.warn("Overflow detected on mic")
-        return audio
+    def read(self, frames):
+        audio = []
+        total_frame_count = 0
+        def callback(indata, frame_count, time, status):
+            nonlocal total_frame_count, audio
+            audio.append(indata)
+            total_frame_count += frame_count
+            if total_frame_count > frames:
+                raise sd.CallbackStop()
+        self.read_callback(callback, 0)
+        return np.concatenate(audio)
 
-    def write(self, file_obj, audio):
+    def write_file(self, file_obj, audio):
         sf.write(file_obj, audio, self.sample_rate, format="WAV")
-
-    def __del__(self):
-        self.stream.stop()
-        self.stream.close()
 
 class AudioPlayer(Thread):
     def __init__(self):
         Thread.__init__(self)
         self._reset()
+        self.active = True
 
     def queue(self, file_obj):
         self.files.append(file_obj)
 
-    def stop(self):
-        self.active = False
+    def stop(self, close=False):
+        self.active = not close
+        self.play = False
 
     def run(self):
-        while True:
+        while self.active:
             try:
-                self._play(self.files.pop(0))
-                if not self.active:
+                self._play_file(self.files.pop(0))
+                if not self.play:
                     self._reset()
             except IndexError:
                 sd.sleep(100)
 
     def _reset(self):
         self.files = []
-        self.active = True
+        self.play = True
 
-    def _play(self, file_obj):
+    def _play_file(self, file_obj):
         with sf.SoundFile(file_obj) as audio_file:
             dtype = np.float32
             def callback(outdata, frame_count, time, status):
@@ -80,8 +86,8 @@ class AudioPlayer(Thread):
                                dtype=dtype,
                                callback=callback,
                                blocksize=blocksize) as stream:
-                while stream.active and self.active:
-                   sd.sleep(int(0.1*1000))
+                while stream.active and self.play:
+                   sd.sleep(100)
 
 if __name__ == "__main__":
     print(sd.query_devices())
