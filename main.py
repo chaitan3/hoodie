@@ -26,7 +26,7 @@ def main():
             player.queue(beep_file)
 
             logging.info("Recording audio")
-            audio = voice_activity.wait_active(min_record_time)
+            audio = voice_activity.wait_inactive(min_record_time)
             logging.info("Stopped recording audio")
 
             audio_file = BytesIO()

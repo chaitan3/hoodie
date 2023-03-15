@@ -9,7 +9,7 @@ class VoiceActivityDetector(object):
         self.vad = webrtcvad.Vad()
         self.recorder = recorder
 
-    def wait_active(self, min_time=0):
+    def wait_inactive(self, min_time=0):
         audio = []
         total_frames = 0
         min_frames = int(min_time * self.recorder.sample_rate)
