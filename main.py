@@ -7,7 +7,7 @@ from wakeword import WakewordDetector
 from vad import VoiceActivityDetector
 from logger import logging
 
-min_record_time = 2 #seconds
+min_record_time = 3 #seconds
 beep_file = "beep.ogg"
 base_url = "http://localhost:5000/"
 #url = "https://hoodie.intern.farcry.pw/query"
