@@ -14,14 +14,16 @@ class WakewordDetector(object):
         ratio = self.recorder.sample_rate // self.porcupine.sample_rate
         frames = self.porcupine.frame_length * ratio
 
+        res = None
         def callback(indata, frame_count, time, status):
+            nonlocal res
             audio = indata[::ratio].copy()
             pcm = struct.unpack_from("h" * self.porcupine.frame_length, audio)
             res = self.porcupine.process(pcm)
             if res >= 0:
-                logging.info(("Detected wakeword", list(pvporcupine.KEYWORDS)[res]))
                 raise sd.CallbackStop()
         self.recorder.read_callback(callback, frames)
+        return list(pvporcupine.KEYWORDS)[res]
 
     def __del__(self):
         self.porcupine.delete()

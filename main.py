@@ -9,8 +9,21 @@ from logger import logging
 
 min_record_time = 2 #seconds
 beep_file = "beep.ogg"
-#url = "http://localhost:5000/query"
-url = "https://hoodie.intern.farcry.pw/query"
+base_url = "http://localhost:5000/"
+#url = "https://hoodie.intern.farcry.pw/query"
+
+def request_handler(audio_file, player):
+    response = requests.post(base_url + "/query", files={'audio': audio_file}).json()
+    file_name = response["output"]
+    logging.info(("Query response:", str(response["intent"]), response["output"]))
+    if len(file_name) > 0:
+        url = f"{base_url}/audio?file={file_name}"
+        data = requests.get(url).content
+        print(len(data))
+        audio_file = BytesIO(data)
+        player.queue(audio_file)
+    elif response["intent"]["command"] == "stop":
+        player.stop()
 
 def main():
     recorder = AudioRecorder()
@@ -22,21 +35,22 @@ def main():
     while True:
         try:
             logging.info("Waiting for wakeword")
-            wakeword.wait_detect()
+            key = wakeword.wait_detect()
+            logging.info(("Detected wakeword", key))
             player.queue(beep_file)
 
             logging.info("Recording audio")
             audio = voice_activity.wait_inactive(min_record_time)
             logging.info("Stopped recording audio")
 
-            audio_file = BytesIO()
+            #audio_file = BytesIO()
+            audio_file = "test.wav"
             recorder.write_file(audio_file, audio)
-            audio_file.seek(0)
+            #audio_file.seek(0)
 
             logging.info("Sending request to server")
-            resp = requests.post(url, files={'audio': audio_file})
+            request_handler(audio_file, player)
             logging.info("Received response from server")
-            player.queue(BytesIO(resp.content))
 
         except KeyboardInterrupt:
             player.stop(close=True)

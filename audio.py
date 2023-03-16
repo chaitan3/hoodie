@@ -5,6 +5,8 @@ from threading import Thread
 
 from logger import logging
 
+sleep_time = 100 #ms
+
 # desktop
 input_device_id = 10
 output_device_id = 11
@@ -30,7 +32,7 @@ class AudioRecorder(object):
                            callback=callback,
                            blocksize=frames) as stream:
             while stream.active:
-               sd.sleep(100)
+               sd.sleep(sleep_time)
 
     def write_file(self, file_obj, audio):
         sf.write(file_obj, audio, self.sample_rate, format="WAV")
@@ -51,11 +53,13 @@ class AudioPlayer(Thread):
     def run(self):
         while self.active:
             try:
-                self._play_file(self.files.pop(0))
+                file_obj = self.files[0]
+                self._play_file(file_obj)
+                self.files.pop(0)
                 if not self.play:
                     self._reset()
             except IndexError:
-                sd.sleep(100)
+                sd.sleep(sleep_time)
 
     def _reset(self):
         self.files = []
@@ -75,7 +79,7 @@ class AudioPlayer(Thread):
                                callback=callback,
                                blocksize=blocksize) as stream:
                 while stream.active and self.play:
-                   sd.sleep(100)
+                   sd.sleep(sleep_time)
 
 if __name__ == "__main__":
     print(sd.query_devices())
@@ -87,8 +91,13 @@ if __name__ == "__main__":
 
     a = AudioPlayer()
     a.start()
+    a.queue("beep.ogg")
     a.queue("test2.ogg")
     a.queue("test3.ogg")
+    a.queue("beep.ogg")
+    while len(a.files) > 0:
+        sd.sleep(sleep_time)
+    a.stop(close=True)
     a.join()
     #import librosa
     #audio = librosa.resample(record_audio(3), orig_sr=device_samp_rate, target_sr=16000)

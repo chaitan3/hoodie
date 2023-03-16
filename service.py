@@ -1,15 +1,26 @@
 from flask import Flask
 from flask import request
-from flask import jsonify, send_file
+from flask import jsonify, send_file, abort
 import soundfile as sf
 import time
+import os
 
 from asr import get_text_from_audio, model_samp_rate
 from intent import parse_text
 from actions import perform_task, save_audio_from_text
+from actions import runner, audio_mimetype, sleep_time
 from logger import logging
 
 app = Flask(__name__)
+
+@app.route('/audio', methods=['POST', 'GET'])
+def handler_audio():
+    audio_file = runner.get_cache(request.values.get("file"))
+    start_time = time.time()
+    max_wait_time = 5
+    while (audio_file not in runner.cache) and (time.time() - start_time) < max_wait_time:
+        time.sleep(sleep_time / 1000)
+    return send_file(audio_file, mimetype=audio_mimetype)
 
 @app.route('/asr', methods=['POST'])
 def handler_asr():
@@ -21,8 +32,10 @@ def handler_asr():
 @app.route('/tts', methods=['POST', "GET"])
 def handler_tts():
     text = request.values.get("text")
-    response, mimetype = save_audio_from_text(text)
-    return send_file(response, mimetype=mimetype)
+    audio_file = BytesIO()
+    save_audio_from_text(audio_file, text)
+    audio_file.seek(0)
+    return send_file(audio_file, mimetype=audio_mimetype)
 
 @app.route('/task', methods=['POST', "GET"])
 def handler_task():
@@ -31,11 +44,8 @@ def handler_task():
         intent = parse_text(text)
     except KeyError:
         intent = request.values.get("intent")
-    response = perform_task(intent)
-    if isinstance(response, dict):
-        return jsonify(response)
-    else:
-        return send_file(response, mimetype="audio/ogg")
+    output = perform_task(intent)
+    return jsonify({"intent": intent, "output": output})
 
 @app.route('/query', methods=['POST'])
 def handler_query():
@@ -47,17 +57,24 @@ def handler_query():
     t3 = time.time()
     intent = parse_text(text)
     t4 = time.time()
-    response = perform_task(intent)
+    output = perform_task(intent)
     t5 = time.time()
     logging.info("Timings:")
     logging.info(("Read audio", t2-t1))
     logging.info(("Transcribe", t3-t2))
     logging.info(("Parse", t4-t3))
     logging.info(("Perform", t5-t4))
-    if isinstance(response, dict):
-        return jsonify(response)
-    else:
-        return send_file(response, mimetype="audio/ogg")
+    response = {
+            "text": text,
+            "intent": intent,
+            "output": output
+    }
+    return jsonify(response)
 
 if __name__ == "__main__":
-    app.run("0.0.0.0")
+    try:
+        runner.start()
+        app.run("0.0.0.0", threaded=True)
+    except KeyboardInterrupt:
+        runner.stop()
+        runner.join()
