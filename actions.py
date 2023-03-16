@@ -46,8 +46,10 @@ class ActionsRunner(Thread):
 runner = ActionsRunner()
 
 def search_and_download_audio(key, phrase):
-    cmd = f'yt-dlp --force-overwrite -f "ba" -x ytsearch1:"{key}" -o {key}'
+    cmd = f'yt-dlp --force-overwrite -f "ba" -x ytsearch1:"{phrase}" -o {key}'
     subprocess.check_call(cmd, shell=True)
+    name = glob.glob(key + "*")[0]
+    os.rename(name, key)
 
 def save_audio_from_text(key, phrase):
     audio, samp_rate = get_audio_from_text(phrase)

@@ -19,7 +19,6 @@ def request_handler(audio_file, player):
     if len(file_name) > 0:
         url = f"{base_url}/audio?file={file_name}"
         data = requests.get(url).content
-        print(len(data))
         audio_file = BytesIO(data)
         player.queue(audio_file)
     elif response["intent"]["command"] == "stop":
@@ -43,10 +42,9 @@ def main():
             audio = voice_activity.wait_inactive(min_record_time)
             logging.info("Stopped recording audio")
 
-            #audio_file = BytesIO()
-            audio_file = "test.wav"
+            audio_file = BytesIO()
             recorder.write_file(audio_file, audio)
-            #audio_file.seek(0)
+            audio_file.seek(0)
 
             logging.info("Sending request to server")
             request_handler(audio_file, player)

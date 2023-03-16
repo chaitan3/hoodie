@@ -16,7 +16,7 @@ class VoiceActivityDetector(object):
         frames = int(vad_frame_time * self.recorder.sample_rate)
         def callback(indata, frame_count, time, status):
             nonlocal total_frames, audio
-            audio.append(indata)
+            audio.append(indata.copy())
             total_frames += frames
             if total_frames > min_frames:
                 res = self.vad.is_speech(indata.tobytes(), self.recorder.sample_rate)
