@@ -18,7 +18,7 @@ input_channels = 1
 #input_device_id = 1
 #output_device_id = 0
 #blocksize = 16384
-#input_samp_rate = 48000
+#input_sample_rate = 48000
 #input_channels = 1
 
 class AudioRecorder(object):
