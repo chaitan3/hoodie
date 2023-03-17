@@ -9,8 +9,8 @@ from logger import logging
 
 min_record_time = 2.5 #seconds
 beep_file = "beep.ogg"
-base_url = "http://localhost:5000/"
-#base_url = "https://hoodie.intern.farcry.pw/query"
+#base_url = "http://localhost:5000/"
+base_url = "https://hoodie.intern.farcry.pw/"
 
 def request_handler(audio_file, player):
     response = requests.post(f"{base_url}/query", files={'audio': audio_file}).json()

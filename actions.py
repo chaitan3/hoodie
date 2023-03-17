@@ -55,7 +55,7 @@ def search_music(phrase):
 
 def download_music(key, config):
     name = os.path.splitext(key)[0]
-    cmd = f'yt-dlp --force-overwrite -f "ba" -x --audio-format vorbis {config["id"]} -o {key}'
+    cmd = f'yt-dlp --force-overwrite -f "ba" -x --audio-format vorbis {config["id"]} -o {name}'
     subprocess.check_call(cmd, shell=True)
 
 def save_audio_from_text(key, phrase):
