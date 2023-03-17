@@ -91,10 +91,15 @@ if __name__ == "__main__":
 
     a = AudioPlayer()
     a.start()
+    #from urllib.request import urlopen
+    #import requests
+    #url = "http://tinyurl.com/shepard-risset"
+    #a.queue(urlopen(url))
+    #a.queue(requests.get(url, stream=True).raw)
     a.queue("beep.ogg")
-    a.queue("test2.ogg")
-    a.queue("test3.ogg")
-    a.queue("beep.ogg")
+    #a.queue("test2.ogg")
+    #a.queue("test3.ogg")
+    #a.queue("beep.ogg")
     while len(a.files) > 0:
         sd.sleep(sleep_time)
     a.stop(close=True)

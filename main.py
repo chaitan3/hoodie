@@ -7,22 +7,21 @@ from wakeword import WakewordDetector
 from vad import VoiceActivityDetector
 from logger import logging
 
-min_record_time = 3 #seconds
+min_record_time = 2.5 #seconds
 beep_file = "beep.ogg"
 base_url = "http://localhost:5000/"
-#url = "https://hoodie.intern.farcry.pw/query"
+#base_url = "https://hoodie.intern.farcry.pw/query"
 
 def request_handler(audio_file, player):
-    response = requests.post(base_url + "/query", files={'audio': audio_file}).json()
-    file_name = response["output"]
+    response = requests.post(f"{base_url}/query", files={'audio': audio_file}).json()
     logging.info(("Query response:", str(response["intent"]), response["output"]))
-    if len(file_name) > 0:
-        url = f"{base_url}/audio?file={file_name}"
-        data = requests.get(url).content
-        audio_file = BytesIO(data)
-        player.queue(audio_file)
-    elif response["intent"]["command"] == "stop":
+    if response["intent"]["command"] == "stop":
         player.stop()
+    for file_name in response["output"]:
+        url = f"{base_url}/audio?file={file_name}"
+        audio_file = BytesIO(requests.get(url).content)
+        #audio_file = requests.get(url, stream=True).raw
+        player.queue(audio_file)
 
 def main():
     recorder = AudioRecorder()

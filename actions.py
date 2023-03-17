@@ -4,6 +4,7 @@ import soundfile as sf
 import uuid
 from threading import Thread
 import time
+import json
 
 from tts import get_audio_from_text
 
@@ -44,12 +45,18 @@ class ActionsRunner(Thread):
             time.sleep(sleep_time / 1000)
 
 runner = ActionsRunner()
+runner.daemon = True
 
-def search_and_download_audio(key, phrase):
-    cmd = f'yt-dlp --force-overwrite -f "ba" -x ytsearch1:"{phrase}" -o {key}'
+def search_music(phrase):
+    cmd = f'yt-dlp --dump-json ytsearch1:"{phrase}"'
+    output = subprocess.check_output(cmd, shell=True)
+    config = json.loads(output.decode('utf-8'))
+    return config
+
+def download_music(key, config):
+    name = os.path.splitext(key)[0]
+    cmd = f'yt-dlp --force-overwrite -f "ba" -x --audio-format vorbis {config["id"]} -o {key}'
     subprocess.check_call(cmd, shell=True)
-    name = glob.glob(key + "*")[0]
-    os.rename(name, key)
 
 def save_audio_from_text(key, phrase):
     audio, samp_rate = get_audio_from_text(phrase)
@@ -61,11 +68,13 @@ def perform_task(intent):
     phrase = " ".join(args)
 
     if cmd == "play" and len(phrase) > 0:
-        return runner.queue(search_and_download_audio, (phrase,))
+        config = search_music(phrase)
+        return [runner.queue(save_audio_from_text, (f'Playing {config["title"]}',)),
+                runner.queue(download_music, (config,))]
     elif cmd == "repeat" and len(phrase) > 0:
-        return runner.queue(save_audio_from_text, (phrase,))
+        return [runner.queue(save_audio_from_text, (phrase,))]
     elif cmd == "stop":
-        return ""
+        return []
     else:
-        phrase = "sorry, could you please repeat?"
-        return runner.queue(save_audio_from_text, (phrase,))
+        phrase = "Sorry, could you please repeat?"
+        return [runner.queue(save_audio_from_text, (phrase,))]

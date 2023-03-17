@@ -72,8 +72,8 @@ def handler_query():
     return jsonify(response)
 
 if __name__ == "__main__":
+    runner.start()
     try:
-        runner.start()
         app.run("0.0.0.0", threaded=True)
     except KeyboardInterrupt:
         runner.stop()
