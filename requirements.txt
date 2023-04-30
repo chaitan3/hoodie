@@ -4,10 +4,10 @@ speechbrain
 flask
 librosa
 yt-dlp
+scipy
 
 soundfile
 sounddevice
-pvporcupine
 webrtcvad
 numpy
-scipy
+requests

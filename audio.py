@@ -8,18 +8,18 @@ from logger import logging
 sleep_time = 100 #ms
 
 # desktop
-input_device_id = 10
-output_device_id = 11
-blocksize = 0
-input_sample_rate = 16000
-input_channels = 1
+#input_device_id = 10
+#output_device_id = 11
+#blocksize = 0
+#input_sample_rate = 16000
+#input_channels = 1
 
 # raspi
-#input_device_id = 1
-#output_device_id = 0
-#blocksize = 16384
-#input_sample_rate = 48000
-#input_channels = 1
+input_device_id = 2
+output_device_id = 1
+blocksize = 0
+input_sample_rate = 48000
+input_channels = 1
 
 class AudioRecorder(object):
     def __init__(self):
@@ -83,11 +83,8 @@ class AudioPlayer(Thread):
 
 if __name__ == "__main__":
     print(sd.query_devices())
-    #from wakeword import wait_for_wakeword
-    #wait_for_wakeword()
-    #record_audio_to_bytes()
-    #wait_for_wakeword()
-    #record_audio_to_bytes()
+
+    #recorder = AudioRecorder()
 
     a = AudioPlayer()
     a.start()
@@ -104,17 +101,3 @@ if __name__ == "__main__":
         sd.sleep(sleep_time)
     a.stop(close=True)
     a.join()
-    #import librosa
-    #audio = librosa.resample(record_audio(3), orig_sr=device_samp_rate, target_sr=16000)
-    #soundfile.write("test.wav", audio, 16000)
-    #from whisper import get_text_from_audio
-    #print(get_text_from_audio(audio))
-
-    #import sys
-    #play_audio_from_file(sys.argv[1])
-    #record_audio_to_file("sd.wav")
-
-    #audio, wav_rate = librosa.load("audiofile10Seconds.wav")
-    #audio = audio[:,0]
-    #audio = librosa.resample(audio, orig_sr=wav_rate, target_sr=device_samp_rate)
-    #play_audio(audio)
