@@ -5,6 +5,20 @@ import soundfile as sf
 import time
 import os
 
+from config import api_key
+
+# The actual decorator function
+from functools import wraps
+def authenticate(view_function):
+    @wraps(view_function)
+    # the new, post-decoration function. Note *args and **kwargs here.
+    def decorated_function(*args, **kwargs):
+        if request.args.get('key') and request.args.get('key') == api_key:
+            return view_function(*args, **kwargs)
+        else:
+            abort(401)
+    return decorated_function
+
 from asr import get_text_from_audio, model_samp_rate
 from intent import parse_text
 from actions import perform_task, save_audio_from_text
@@ -14,6 +28,7 @@ from logger import logging
 app = Flask(__name__)
 
 @app.route('/audio', methods=['POST', 'GET'])
+@authenticate
 def handler_audio():
     audio_file = runner.get_cache(request.values.get("file"))
     start_time = time.time()
@@ -23,6 +38,7 @@ def handler_audio():
     return send_file(audio_file, mimetype=audio_mimetype)
 
 @app.route('/asr', methods=['POST'])
+@authenticate
 def handler_asr():
     audio_file = request.files.get("audio")
     audio, samp_rate = sf.read(audio_file)
@@ -30,6 +46,7 @@ def handler_asr():
     return jsonify({"text": text})
 
 @app.route('/tts', methods=['POST', "GET"])
+@authenticate
 def handler_tts():
     text = request.values.get("text")
     audio_file = BytesIO()
@@ -38,6 +55,7 @@ def handler_tts():
     return send_file(audio_file, mimetype=audio_mimetype)
 
 @app.route('/task', methods=['POST', "GET"])
+@authenticate
 def handler_task():
     try:
         text = request.values.get("text")
@@ -48,6 +66,7 @@ def handler_task():
     return jsonify({"intent": intent, "output": output})
 
 @app.route('/query', methods=['POST'])
+@authenticate
 def handler_query():
     audio_file = request.files.get("audio")
     t1 = time.time()

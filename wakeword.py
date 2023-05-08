@@ -1,6 +1,6 @@
 import numpy as np
 import struct
-import pvporcupine
+#import pvporcupine
 import sounddevice as sd
 
 from logger import logging
