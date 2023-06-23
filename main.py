@@ -16,13 +16,16 @@ base_url = "https://hoodie.intern.farcry.pw/"
 def request_handler(audio_file, player):
     response = requests.post(f"{base_url}/query",
                              params={'key': api_key},
-                             files={'audio': audio_file}).json()
+                             files={'audio': audio_file})
+    response = response.json()
     logging.info(("Query response:", str(response["intent"]), response["output"]))
     if response["intent"]["command"] == "stop":
         player.stop()
     for file_name in response["output"]:
         url = f"{base_url}/audio?file={file_name}"
-        audio_file = BytesIO(requests.get(url).content)
+        audio_response = requests.get(url,
+                             params={'key': api_key})
+        audio_file = BytesIO(audio_response.content)
         #audio_file = requests.get(url, stream=True).raw
         player.queue(audio_file)
 
