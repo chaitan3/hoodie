@@ -5,7 +5,7 @@ from threading import Thread
 
 from logger import logging
 
-sleep_time = 100 #ms
+sleep_time = 50 #ms
 
 # desktop
 #input_device_id = 10
@@ -28,6 +28,7 @@ class AudioRecorder(object):
     def read_callback(self, callback, frames):
         with sd.InputStream(device=input_device_id, samplerate=self.sample_rate,
                            channels=input_channels,
+                           latency=0.1,
                            dtype=np.int16,
                            callback=callback,
                            blocksize=frames) as stream:
