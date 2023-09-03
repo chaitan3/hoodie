@@ -39,7 +39,7 @@ class WakewordDetector(object):
                 res = self.detector.predict(pcm)[self.keyword]
                 #print("prediction", res)
                 wake_audio.pop(0)
-                wake_audio.append(pcm.copy())
+                wake_audio.append(buffer[:block_size].copy())
                 if res >= self.threshold and self.count > self.skip_frames:
                     self.detector.reset()
                     raise sd.CallbackStop()
