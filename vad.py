@@ -23,4 +23,4 @@ class VoiceActivityDetector(object):
                 if res:
                     raise sd.CallbackStop()
         self.recorder.read_callback(callback, frames)
-        return np.concatenate(audio)
+        return np.concatenate(audio).flatten()

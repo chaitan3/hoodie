@@ -8,11 +8,11 @@ from logger import logging
 sleep_time = 50 #ms
 
 # desktop
-#input_device_id = 10
-#output_device_id = 11
-#blocksize = 0
-#input_sample_rate = 16000
-#input_channels = 1
+input_device_id = 10
+output_device_id = 11
+blocksize = 0
+input_sample_rate = 16000
+input_channels = 1
 
 # raspi
 input_device_id = 3

@@ -21,6 +21,9 @@ def request_handler(audio_file, player):
     logging.info(("Query response:", str(response["intent"]), response["output"]))
     if response["intent"]["command"] == "stop":
         player.stop()
+        return
+    elif response["intent"]["command"] == "false_positive":
+        return
     for file_name in response["output"]:
         url = f"{base_url}/audio?file={file_name}"
         audio_response = requests.get(url,
@@ -39,7 +42,7 @@ def main():
     while True:
         try:
             logging.info("Waiting for wakeword")
-            key = wakeword.wait_detect()
+            key, wake_audio = wakeword.wait_detect()
             logging.info(("Detected wakeword", key))
             player.queue(beep_file)
 
@@ -48,7 +51,7 @@ def main():
             logging.info("Stopped recording audio")
 
             audio_file = BytesIO()
-            recorder.write_file(audio_file, audio)
+            recorder.write_file(audio_file, np.concatenate((wake_audio, audio)))
             audio_file.seek(0)
 
             logging.info("Sending request to server")
