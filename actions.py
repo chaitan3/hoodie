@@ -73,7 +73,7 @@ def perform_task(intent):
                 runner.queue(download_music, (config,))]
     elif cmd == "repeat" and len(phrase) > 0:
         return [runner.queue(save_audio_from_text, (phrase,))]
-    elif (cmd == "stop") || (cmd == "false_positive"):
+    elif (cmd == "stop") or (cmd == "false_positive"):
         return []
     else:
         phrase = "Sorry, could you please repeat?"
