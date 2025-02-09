@@ -26,7 +26,7 @@ def parse_text(text):
             args = tokens[2:]
     intent["command"] = cmd
     intent["arguments"] = args
-    logging.info(("Intent:", intent))
+    logging.info(("Query response:", str(intent)))
     return intent
 
 if __name__ == "__main__":

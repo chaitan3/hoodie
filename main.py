@@ -1,13 +1,13 @@
 import requests
-from io import BytesIO
 import numpy as np
 from logger import logging
+import io
 
 from audio import AudioRecorder, AudioPlayer
 from wakeword import WakewordDetector
 from vad import VoiceActivityDetector
 
-from actions import perform_task
+from actions import perform_task, get_text_from_audio
 from intent import parse_text
 
 from config import api_key
@@ -18,9 +18,8 @@ beep_file = "beep.ogg"
 def request_handler(audio_file, player):
     text = get_text_from_audio(audio_file)
     intent = parse_text(text)
-    logging.info(("Query response:", str(intent)))
     output = perform_task(intent, player)
-        
+       
 def main():
     recorder = AudioRecorder()
     wakeword = WakewordDetector(recorder)
@@ -39,7 +38,7 @@ def main():
             audio = voice_activity.wait_inactive(min_record_time)
             logging.info("Stopped recording audio")
 
-            audio_file = BytesIO()
+            audio_file = io.BytesIO()
             recorder.write_file(audio_file, np.concatenate((wake_audio, audio)))
             audio_file.seek(0)
 

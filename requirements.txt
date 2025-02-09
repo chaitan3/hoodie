@@ -6,3 +6,4 @@ openwakeword
 yt-dlp
 requests
 regex
+resampy

@@ -1,18 +1,21 @@
 import numpy as np
 import soundfile as sf
 import sounddevice as sd
-from threading import Thread
+import resampy
+import io
 
+from threading import Thread
 from logger import logging
 
 sleep_time = 50 #ms
 
 # desktop
 input_device_id = 10
-output_device_id = 11
+output_device_id = 0
 blocksize = 0
 input_sample_rate = 16000
 input_channels = 1
+output_sample_rate = 44100
 
 # raspi
 #input_device_id = 3
@@ -35,8 +38,8 @@ class AudioRecorder(object):
             while stream.active:
                sd.sleep(sleep_time)
 
-    def write_file(self, file_obj, audio):
-        sf.write(file_obj, audio, self.sample_rate, format="WAV")
+    def write_file(self, audio_file, audio):
+        sf.write(audio_file, audio, self.sample_rate, format="WAV")
 
 class AudioPlayer(Thread):
     def __init__(self):
@@ -44,8 +47,8 @@ class AudioPlayer(Thread):
         self._reset()
         self.active = True
 
-    def queue(self, file_obj):
-        self.files.append(file_obj)
+    def queue(self, audio_file):
+        self.files.append(audio_file)
 
     def stop(self, close=False):
         self.active = not close
@@ -54,8 +57,8 @@ class AudioPlayer(Thread):
     def run(self):
         while self.active:
             try:
-                file_obj = self.files[0]
-                self._play_file(file_obj)
+                audio_file = self.files[0]
+                self._play_file(audio_file)
                 self.files.pop(0)
                 if not self.play:
                     self._reset()
@@ -66,16 +69,22 @@ class AudioPlayer(Thread):
         self.files = []
         self.play = True
 
-    def _play_file(self, file_obj):
-        with sf.SoundFile(file_obj) as audio_file:
+    def _play_file(self, audio_file):
+        data, samplerate = sf.read(audio_file)  # Load with original sample rate
+        if samplerate != output_sample_rate:
+            output_data = resampy.resample(data, samplerate, output_sample_rate)  # Resample to 16kHz
+            audio_file = io.BytesIO()
+            sf.write(audio_file, output_data, output_sample_rate, format="WAV")
+            audio_file.seek(0)
+        with sf.SoundFile(audio_file) as audio_obj:
             dtype = np.float32
             def callback(outdata, frame_count, time, status):
-                data = audio_file.read(frame_count, out=outdata, dtype=dtype)
+                data = audio_obj.read(frame_count, out=outdata, dtype=dtype)
                 if (data.size != outdata.size):
                     outdata[data.shape[0]:,:].fill(0.0)
                     raise sd.CallbackStop()
-            with sd.OutputStream(device=output_device_id, samplerate=audio_file.samplerate,
-                               channels=audio_file.channels,
+            with sd.OutputStream(device=output_device_id, samplerate=audio_obj.samplerate,
+                               channels=audio_obj.channels,
                                dtype=dtype,
                                callback=callback,
                                blocksize=blocksize) as stream:
@@ -84,6 +93,7 @@ class AudioPlayer(Thread):
 
 if __name__ == "__main__":
     print(sd.query_devices())
+    exit(0)
 
     #recorder = AudioRecorder()
 
