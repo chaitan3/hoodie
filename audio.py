@@ -47,6 +47,7 @@ class AudioPlayer(Thread):
         self._reset()
         self.active = True
         self.stream = None
+        self.audio_obj = None
 
     def queue(self, audio_file):
         self.files.append(audio_file)
@@ -71,6 +72,22 @@ class AudioPlayer(Thread):
         self.files = []
         self.play = True
 
+    def _open(self, audio_obj):
+        dtype = np.float32
+        def callback(outdata, frame_count, time, status):
+            if self.audio_obj:
+                data = self.audio_obj.read(frame_count, out=outdata, dtype=dtype)
+                if (data.size != outdata.size):
+                    outdata[data.shape[0]:,:].fill(0.0)
+                    self.audio_obj = None
+            else:
+                outdata[:,:].fill(0.0)
+        self.stream = sd.OutputStream(device=output_device_id, samplerate=audio_obj.samplerate,
+                               channels=audio_obj.channels,
+                               dtype=dtype,
+                               callback=callback,
+                               blocksize=blocksize)
+
     def _play_file(self, audio_file):
         data, samplerate = sf.read(audio_file)  # Load with original sample rate
         if samplerate != output_sample_rate:
@@ -79,24 +96,14 @@ class AudioPlayer(Thread):
             sf.write(audio_file, output_data, output_sample_rate, format="WAV")
             audio_file.seek(0)
         with sf.SoundFile(audio_file) as audio_obj:
-            dtype = np.float32
-            def callback(outdata, frame_count, time, status):
-                data = audio_obj.read(frame_count, out=outdata, dtype=dtype)
-                if (data.size != outdata.size):
-                    outdata[data.shape[0]:,:].fill(0.0)
-                    raise sd.CallbackStop()
+            self.audio_obj = audio_obj
             if self.stream is None:
-                self.stream = sd.OutputStream(device=output_device_id, samplerate=audio_obj.samplerate,
-                           channels=audio_obj.channels,
-                           dtype=dtype,
-                           callback=callback,
-                           blocksize=blocksize)
-            while self.stream.active and self.play:
+                self._open(audio_obj)
+            while self.audio_obj and self.play:
                sd.sleep(sleep_time)
 
 if __name__ == "__main__":
     print(sd.query_devices())
-    exit(0)
 
     #recorder = AudioRecorder()
 
