@@ -24,6 +24,9 @@ def parse_text(text):
             cmd = remove_punctuation(tokens[1])
         if len(tokens) > 2:
             args = tokens[2:]
+    if cmd not in ["play", "repeat", "stop", "false_positive"]:
+        args = [cmd] + args
+        cmd = "llm"
     intent["command"] = cmd
     intent["arguments"] = args
     logging.info(("Query response:", str(intent)))

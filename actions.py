@@ -29,6 +29,27 @@ def get_audio_from_text(text):
     audio = response.content
     return io.BytesIO(audio)
 
+def ask_llm_query(text):
+    headers = {"Authorization": f"Bearer {api_key}"}
+    response = requests.post(f"{base_url}/chat/completions",
+                             headers = headers,
+                             json={
+                                 "model": "llama3:latest",
+                                 "messages": [
+                                    {
+                                        "role": "developer",
+                                        "content": "You are a helpful assistant, respond in one sentence"
+                                    },
+                                    {
+                                        "role": "user",
+                                        "content": text
+                                    }
+                                ]
+                            })
+    response = response.json()
+    return response["choices"][0]["message"]["content"]
+
+
 def search_music(phrase):
     cmd = f'yt-dlp --dump-json ytsearch1:"{phrase}"'
     output = subprocess.check_output(cmd, shell=True)
@@ -45,14 +66,16 @@ def perform_task(intent, player):
     args = intent["arguments"]
     phrase = " ".join(args)
 
-    if cmd == "play" and len(phrase) > 0:
+    if cmd == "stop" or len(phrase) == 0:
+        return
+    elif cmd == "play":
         config = search_music(phrase)
         out_phrase = f'Playing {config["title"]}.'
         # download_music(config)
-    elif cmd == "repeat" and len(phrase) > 0:
+    elif cmd == "repeat":
         out_phrase = phrase
-    elif (cmd == "stop") or (cmd == "false_positive"):
-        return
+    elif cmd == "llm":
+        out_phrase = ask_llm_query(phrase)
     else:
         out_phrase = "Sorry, could you please repeat?"
     logging.info(("Output phrase:", out_phrase))
@@ -72,8 +95,9 @@ def load_audio():
     return audio
 
 if __name__ == "__main__":
-    audio = get_audio_from_text("hello")
-    save_audio(audio)
-    audio = load_audio()
-    text = get_text_from_audio(audio)
+    text = ask_llm_query("What is going on?")
+    #audio = get_audio_from_text("hello")
+    #save_audio(audio)
+    #audio = load_audio()
+    #text = get_text_from_audio(audio)
     print(text)
