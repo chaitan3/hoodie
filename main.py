@@ -47,7 +47,7 @@ def main():
             audio_file.seek(0)
 
             logging.info("Sending request to server")
-            request_handler(audio_file, player)
+            status = request_handler(audio_file, player)
             logging.info("Received response from server")
             if not status:
                 with open(f"failed_audio_{failure_count}.wav", "wb") as out_file:
