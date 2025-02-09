@@ -46,6 +46,7 @@ class AudioPlayer(Thread):
         Thread.__init__(self)
         self._reset()
         self.active = True
+        self.stream = None
 
     def queue(self, audio_file):
         self.files.append(audio_file)
@@ -63,6 +64,7 @@ class AudioPlayer(Thread):
                 if not self.play:
                     self._reset()
             except IndexError:
+                self.stream = None
                 sd.sleep(sleep_time)
 
     def _reset(self):
@@ -83,13 +85,14 @@ class AudioPlayer(Thread):
                 if (data.size != outdata.size):
                     outdata[data.shape[0]:,:].fill(0.0)
                     raise sd.CallbackStop()
-            with sd.OutputStream(device=output_device_id, samplerate=audio_obj.samplerate,
-                               channels=audio_obj.channels,
-                               dtype=dtype,
-                               callback=callback,
-                               blocksize=blocksize) as stream:
-                while stream.active and self.play:
-                   sd.sleep(sleep_time)
+            if self.stream is None:
+                self.stream = sd.OutputStream(device=output_device_id, samplerate=audio_obj.samplerate,
+                           channels=audio_obj.channels,
+                           dtype=dtype,
+                           callback=callback,
+                           blocksize=blocksize)
+            while self.stream.active and self.play:
+               sd.sleep(sleep_time)
 
 if __name__ == "__main__":
     print(sd.query_devices())
