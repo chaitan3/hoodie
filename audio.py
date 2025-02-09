@@ -10,8 +10,8 @@ from logger import logging
 sleep_time = 50 #ms
 
 # desktop
-input_device_id = 10
-output_device_id = 0
+input_device_id = 4
+output_device_id = 8
 blocksize = 0
 input_sample_rate = 16000
 input_channels = 1

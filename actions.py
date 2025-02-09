@@ -7,45 +7,46 @@ import re
 
 import requests
 from config import api_key, base_url
-def get_text_from_audio(audio_file):
+def get_text_from_audio(audio_file, model="small"):
     headers = {"Authorization": f"Bearer {api_key}"}
     response = requests.post(f"{base_url}/v1/audio/transcriptions",
                              headers = headers,
                              files={
                                  'file': ("audio", audio_file, "audio/wav"),
-                                 'model': "small"
+                                 'model': model
                             })
     assert(response.status_code == 200)
     response = response.json()
     text = response["text"]
     return text
 
-def get_audio_from_text(text):
+def get_audio_from_text(text, model="tts-1"):
     headers = {"Authorization": f"Bearer {api_key}"}
     response = requests.post(f"{base_url}/v1/audio/speech",
                              headers = headers,
                              json={
                                  "input": text,
-                                 "model": "tts-1"
+                                 "model": model
                             })
     assert(response.status_code == 200)
     audio = response.content
     return io.BytesIO(audio)
 
-def ask_llm_query(text):
+def ask_llm_query(prompt, model="llama3:latest"):
     headers = {"Authorization": f"Bearer {api_key}"}
+    instruction = "You are a helpful assistant and you should respond in one short sentence."
     response = requests.post(f"{base_url}/chat/completions",
                              headers = headers,
                              json={
-                                 "model": "llama3:latest",
+                                 "model": model,
                                  "messages": [
                                     {
                                         "role": "developer",
-                                        "content": "You are a helpful assistant, respond in one short sentence"
+                                        "content": instruction
                                     },
                                     {
                                         "role": "user",
-                                        "content": text
+                                        "content": prompt
                                     }
                                 ]
                             })
@@ -80,6 +81,7 @@ def get_weather():
     return period["detailedForecast"]
 
 def perform_task(intent, player):
+    status = True
     cmd = intent["command"]
     args = intent["arguments"]
     phrase = " ".join(args)
@@ -97,6 +99,7 @@ def perform_task(intent, player):
         out_phrase = ask_llm_query(phrase)
     else:
         out_phrase = "Sorry, could you please repeat?"
+        status = False
     logging.info(("Output phrase:", out_phrase))
     sentences = re.split("[,!\.\?]", out_phrase)
     for chunk in sentences:
@@ -106,27 +109,30 @@ def perform_task(intent, player):
     if cmd == "play":
         audio = download_music(config)
         player.queue(audio)
+    return status
 
-import struct
-import numpy as np
-import soundfile as sf
-def save_audio(audio_data):
-    with open("out.wav", "wb") as f:
-        num_samples = len(audio_data) // 2  # assume 16-bit PCM
-        waveform = np.array(struct.unpack(str(num_samples) + "H", audio_data)).astype(np.int16)
-        sf.write(f, waveform, 16000)
-def load_audio():
-    with open("out.wav", "rb") as f:
-        audio = f.read()
-    return audio
 
 if __name__ == "__main__":
-    config = search_music("Swiss Portrait - Patagonia")
-    print(download_music(config))
+    import struct
+    import numpy as np
+    import soundfile as sf
+    def save_audio(audio_data):
+        with open("out.wav", "wb") as f:
+            num_samples = len(audio_data) // 2  # assume 16-bit PCM
+            waveform = np.array(struct.unpack(str(num_samples) + "H", audio_data)).astype(np.int16)
+            sf.write(f, waveform, 16000)
+    def load_audio():
+        with open("out.wav", "rb") as f:
+            audio = f.read()
+        return audio
+
+    import sys
+    #config = search_music("Swiss Portrait - Patagonia")
+    #print(download_music(config))
     #text = ask_llm_query("What is going on?")
     #text = get_weather()
     #audio = get_audio_from_text("hello")
     #save_audio(audio)
     #audio = load_audio()
-    #text = get_text_from_audio(audio)
+    text = get_text_from_audio(sys.argv[1], model="small")
     print(text)

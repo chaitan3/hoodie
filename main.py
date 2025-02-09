@@ -18,9 +18,12 @@ beep_file = "beep.ogg"
 def request_handler(audio_file, player):
     text = get_text_from_audio(audio_file)
     intent = parse_text(text)
-    output = perform_task(intent, player)
+    status = perform_task(intent, player)
+    return status
+    
        
 def main():
+    failure_count = 0
     recorder = AudioRecorder()
     wakeword = WakewordDetector(recorder)
     voice_activity = VoiceActivityDetector(recorder)
@@ -39,12 +42,17 @@ def main():
             logging.info("Stopped recording audio")
 
             audio_file = io.BytesIO()
-            recorder.write_file(audio_file, np.concatenate((wake_audio, audio)))
+            audio_data = np.concatenate((wake_audio, audio))
+            recorder.write_file(audio_file, audio_data)
             audio_file.seek(0)
 
             logging.info("Sending request to server")
             request_handler(audio_file, player)
             logging.info("Received response from server")
+            if not status:
+                with open(f"failed_audio_{failure_count}.wav", "wb") as out_file:
+                    sf.write(f, audio_data, recorder.sample_rate, format="WAV")
+                failure_count += 1
 
         except KeyboardInterrupt:
             player.stop(close=True)
