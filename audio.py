@@ -9,7 +9,7 @@ from logger import logging
 import time
 
 sleep_time = 50 #ms
-timeout_time = 10000
+timeout_time = 10 #s
 
 # desktop
 input_device_id = 4
