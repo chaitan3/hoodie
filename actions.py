@@ -3,6 +3,7 @@ import os, shutil, glob
 import json
 import io
 from logger import logging
+import re
 
 import requests
 from config import api_key, base_url
@@ -14,6 +15,7 @@ def get_text_from_audio(audio_file):
                                  'file': ("audio", audio_file, "audio/wav"),
                                  'model': "small"
                             })
+    assert(response.status_code == 200)
     response = response.json()
     text = response["text"]
     return text
@@ -26,6 +28,7 @@ def get_audio_from_text(text):
                                  "input": text,
                                  "model": "tts-1"
                             })
+    assert(response.status_code == 200)
     audio = response.content
     return io.BytesIO(audio)
 
@@ -38,7 +41,7 @@ def ask_llm_query(text):
                                  "messages": [
                                     {
                                         "role": "developer",
-                                        "content": "You are a helpful assistant, respond in one sentence"
+                                        "content": "You are a helpful assistant, respond in one short sentence"
                                     },
                                     {
                                         "role": "user",
@@ -46,9 +49,12 @@ def ask_llm_query(text):
                                     }
                                 ]
                             })
+    assert(response.status_code == 200)
     response = response.json()
-    return response["choices"][0]["message"]["content"]
-
+    text = response["choices"][0]["message"]["content"]
+    text = text.replace('\n', ' ')
+    text = text.replace('...', ',')
+    return text
 
 def search_music(phrase):
     cmd = f'yt-dlp --dump-json ytsearch1:"{phrase}"'
@@ -79,7 +85,11 @@ def perform_task(intent, player):
     else:
         out_phrase = "Sorry, could you please repeat?"
     logging.info(("Output phrase:", out_phrase))
-    player.queue(get_audio_from_text(out_phrase))
+    sentences = re.split("[,!\.\?]", out_phrase)
+    for chunk in sentences:
+        if len(chunk) == 0:
+            continue
+        player.queue(get_audio_from_text(chunk))
 
 import struct
 import numpy as np
