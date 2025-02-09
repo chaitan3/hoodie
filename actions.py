@@ -20,7 +20,11 @@ def get_text_from_audio(audio_file, model="small"):
     text = response["text"]
     return text
 
+import inflect
+converter = inflect.engine()
+
 def get_audio_from_text(text, model="tts-1"):
+    text = re.sub(r"(\d+(?:\.\d+)?)", lambda x: converter.number_to_words(x.group(0)), text)
     headers = {"Authorization": f"Bearer {api_key}"}
     response = requests.post(f"{base_url}/v1/audio/speech",
                              headers = headers,
@@ -126,6 +130,7 @@ if __name__ == "__main__":
     import numpy as np
     import soundfile as sf
     def save_audio(audio_data):
+        audio_data = audio_data.read()
         with open("out.wav", "wb") as f:
             num_samples = len(audio_data) // 2  # assume 16-bit PCM
             waveform = np.array(struct.unpack(str(num_samples) + "H", audio_data)).astype(np.int16)
@@ -140,8 +145,8 @@ if __name__ == "__main__":
     #print(download_music(config))
     #text = ask_llm_query("What is going on?")
     #text = get_weather()
-    #audio = get_audio_from_text("hello")
-    #save_audio(audio)
+    audio = get_audio_from_text("what is 2.2 multiplied by 4?")
+    save_audio(audio)
     #audio = load_audio()
-    text = get_text_from_audio(sys.argv[1], model="small")
-    print(text)
+    #text = get_text_from_audio(sys.argv[1], model="small")
+    #print(text)
