@@ -6,12 +6,14 @@ import io
 
 from threading import Thread
 from logger import logging
+import time
 
 sleep_time = 50 #ms
+timeout_time = 10000
 
 # desktop
 input_device_id = 4
-output_device_id = 8
+output_device_id = 0
 blocksize = 0
 input_sample_rate = 16000
 input_channels = 1
@@ -46,8 +48,7 @@ class AudioPlayer(Thread):
         Thread.__init__(self)
         self._reset()
         self.active = True
-        self.stream = None
-        self.audio_obj = None
+        self.audio_stream = None
 
     def queue(self, audio_file):
         self.files.append(audio_file)
@@ -57,36 +58,41 @@ class AudioPlayer(Thread):
         self.play = False
 
     def run(self):
+        start_time = time.time()
         while self.active:
             try:
-                audio_file = self.files[0]
-                self._play_file(audio_file)
-                self.files.pop(0)
+                self._play_file(self.files.pop(0))
                 if not self.play:
                     self._reset()
             except IndexError:
-                self.stream = None
+                curr_time = time.time()
+                if self.stream and (curr_time - start_time) > timeout_time:
+                    start_time = curr_time
+                    self.stream = None
                 sd.sleep(sleep_time)
 
     def _reset(self):
         self.files = []
         self.play = True
+        self.stream = None
+        self.audio_stream = None
 
-    def _open(self, audio_obj):
+    def _open_stream(self):
         dtype = np.float32
         def callback(outdata, frame_count, time, status):
-            if self.audio_obj:
-                data = self.audio_obj.read(frame_count, out=outdata, dtype=dtype)
+            if self.audio_stream:
+                data = self.audio_stream.read(frame_count, out=outdata, dtype=dtype)
                 if (data.size != outdata.size):
                     outdata[data.shape[0]:,:].fill(0.0)
-                    self.audio_obj = None
+                    self.audio_stream = None
             else:
                 outdata[:,:].fill(0.0)
-        self.stream = sd.OutputStream(device=output_device_id, samplerate=audio_obj.samplerate,
-                               channels=audio_obj.channels,
+        self.stream = sd.OutputStream(device=output_device_id, samplerate=self.audio_stream.samplerate,
+                               channels=self.audio_stream.channels,
                                dtype=dtype,
                                callback=callback,
                                blocksize=blocksize)
+        self.stream.start()
 
     def _play_file(self, audio_file):
         data, samplerate = sf.read(audio_file)  # Load with original sample rate
@@ -95,12 +101,11 @@ class AudioPlayer(Thread):
             audio_file = io.BytesIO()
             sf.write(audio_file, output_data, output_sample_rate, format="WAV")
             audio_file.seek(0)
-        with sf.SoundFile(audio_file) as audio_obj:
-            self.audio_obj = audio_obj
-            if self.stream is None:
-                self._open(audio_obj)
-            while self.audio_obj and self.play:
-               sd.sleep(sleep_time)
+        self.audio_stream = sf.SoundFile(audio_file)
+        if self.stream is None:
+            self._open_stream()
+        while self.audio_stream and self.play:
+           sd.sleep(sleep_time)
 
 if __name__ == "__main__":
     print(sd.query_devices())
