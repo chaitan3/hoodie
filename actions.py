@@ -67,10 +67,10 @@ def download_music(config):
     cmd = f'yt-dlp --force-overwrite -f "ba" -x --audio-format vorbis {config["id"]} -o {output_file}'
     subprocess.check_call(cmd, shell=True)
     output_file += ".ogg"
-    with open(output_file, "rb") as f:
-        audio = f.read()
-    os.remove(output_file)
-    return io.BytesIO(audio)
+    #with open(output_file, "rb") as f:
+    #    audio = f.read()
+    #os.remove(output_file)
+    return io.BytesIO(output_file)
 
 def get_weather():
     URL = 'https://api.weather.gov/gridpoints/BOX/69,91/forecast'
