@@ -20,11 +20,11 @@ def parse_text(text):
         key = remove_punctuation(tokens[0])
         if key != wake_keyword:
             cmd = "false_positive"
+            args = tokens
         elif len(tokens) > 1:
             cmd = remove_punctuation(tokens[1])
-        if len(tokens) > 2:
             args = tokens[2:]
-    if cmd not in ["play", "repeat", "stop", "false_positive"]:
+    if cmd not in ["play", "repeat", "stop", "false_positive", "weather"]:
         args = [cmd] + args
         cmd = "llm"
     intent["command"] = cmd

@@ -64,8 +64,16 @@ def search_music(phrase):
 
 def download_music(key, config):
     name = os.path.splitext(key)[0]
-    cmd = f'yt-dlp --force-overwrite -f "ba" -x --audio-format vorbis {config["id"]} -o {name}'
-    subprocess.check_call(cmd, shell=True)
+    cmd = f'yt-dlp --force-overwrite -f "ba" -x --audio-format vorbis {config["id"]} -o -'
+    audio = subprocess.check_output(cmd, shell=True)
+    return io.BytesIO(audio)
+
+def get_weather():
+    URL = 'https://api.weather.gov/gridpoints/BOX/69,91/forecast'
+    response = requests.get(URL)
+    forecast = response.json()['properties']
+    period = forecast['periods'][0]
+    return period["detailedForecast"]
 
 def perform_task(intent, player):
     cmd = intent["command"]
@@ -77,7 +85,8 @@ def perform_task(intent, player):
     elif cmd == "play":
         config = search_music(phrase)
         out_phrase = f'Playing {config["title"]}.'
-        # download_music(config)
+    elif cmd == "weather":
+        out_phrase = get_weather()
     elif cmd == "repeat":
         out_phrase = phrase
     elif cmd == "llm":
@@ -90,6 +99,9 @@ def perform_task(intent, player):
         if len(chunk) == 0:
             continue
         player.queue(get_audio_from_text(chunk))
+    if cmd == "play":
+        audio = download_music(config)
+        player.queue(audio)
 
 import struct
 import numpy as np
@@ -105,7 +117,8 @@ def load_audio():
     return audio
 
 if __name__ == "__main__":
-    text = ask_llm_query("What is going on?")
+    #text = ask_llm_query("What is going on?")
+    text = get_weather()
     #audio = get_audio_from_text("hello")
     #save_audio(audio)
     #audio = load_audio()
