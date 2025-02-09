@@ -52,7 +52,7 @@ def main():
             logging.info("Received response from server")
             if not status:
                 with open(f"failed_audio_{failure_count}.wav", "wb") as out_file:
-                    sf.write(f, audio_data, recorder.sample_rate, format="WAV")
+                    sf.write(out_file, audio_data, recorder.sample_rate, format="WAV")
                 failure_count += 1
 
         except KeyboardInterrupt:
