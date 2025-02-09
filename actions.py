@@ -87,14 +87,17 @@ def perform_task(intent, player):
     args = intent["arguments"]
     phrase = " ".join(args)
 
-    out_phrase = "Sorry, could you please repeat?"
-    if len(phrase) == 0:
+    out_phrase = ""
+    if cmd == "false_positive":
+        status = False
+    elif len(phrase) == 0:
         if cmd == "stop":
             player.stop()
             return
         elif cmd == "weather":
             out_phrase = get_weather()
         else:
+            out_phrase = "Sorry, could you please repeat?"
             status = False
     elif cmd == "repeat":
         out_phrase = phrase
@@ -104,6 +107,7 @@ def perform_task(intent, player):
     elif cmd == "llm":
         out_phrase = ask_llm_query(phrase)
     else:
+        out_phrase = "Sorry, could you please repeat?"
         status = False
     logging.info(("Output phrase:", out_phrase))
     sentences = re.split("[,!\.\?]", out_phrase)
