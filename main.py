@@ -1,37 +1,26 @@
 import requests
 from io import BytesIO
 import numpy as np
+from logger import logging
 
 from audio import AudioRecorder, AudioPlayer
 from wakeword import WakewordDetector
 from vad import VoiceActivityDetector
-from logger import logging
+
+from actions import perform_task
+from intent import parse_text
+
 from config import api_key
 
 min_record_time = 2.5 #seconds
 beep_file = "beep.ogg"
-#base_url = "http://localhost:5000/"
-base_url = "https://hoodie.intern.farcry.pw/"
 
 def request_handler(audio_file, player):
-    response = requests.post(f"{base_url}/query",
-                             params={'key': api_key},
-                             files={'audio': audio_file})
-    response = response.json()
-    logging.info(("Query response:", str(response["intent"]), response["output"]))
-    if response["intent"]["command"] == "stop":
-        player.stop()
-        return
-    elif response["intent"]["command"] == "false_positive":
-        return
-    for file_name in response["output"]:
-        url = f"{base_url}/audio?file={file_name}"
-        audio_response = requests.get(url,
-                             params={'key': api_key})
-        audio_file = BytesIO(audio_response.content)
-        #audio_file = requests.get(url, stream=True).raw
-        player.queue(audio_file)
-
+    text = get_text_from_audio(audio_file)
+    intent = parse_text(text)
+    logging.info(("Query response:", str(intent)))
+    output = perform_task(intent, player)
+        
 def main():
     recorder = AudioRecorder()
     wakeword = WakewordDetector(recorder)

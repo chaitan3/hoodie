@@ -1,12 +1,9 @@
 import subprocess
 import os, shutil, glob
-import soundfile as sf
 import uuid
 from threading import Thread
 import time
 import json
-
-from tts import get_audio_from_text
 
 sleep_time = 10 # ms
 audio_mimetype = "audio/ogg"
@@ -47,6 +44,31 @@ class ActionsRunner(Thread):
 runner = ActionsRunner()
 runner.daemon = True
 
+import requests
+from config import api_key, base_url
+def get_text_from_audio(audio_file):
+    headers = {"Authorization": f"Bearer {api_key}"}
+    response = requests.post(f"{base_url}/v1/audio/transcriptions",
+                             headers = headers,
+                             json={
+                                 'file': audio_file,
+                                 'model': "small"
+                            })
+    response = response.json()
+    text = response["text"]
+    return text
+
+def get_audio_from_text(text):
+    headers = {"Authorization": f"Bearer {api_key}"}
+    response = requests.post(f"{base_url}/v1/audio/speech",
+                             headers = headers,
+                             json={
+                                 "input": text,
+                                 "model": "tts-1"
+                            })
+    audio = response.content
+    return audio
+
 def search_music(phrase):
     cmd = f'yt-dlp --dump-json ytsearch1:"{phrase}"'
     output = subprocess.check_output(cmd, shell=True)
@@ -58,23 +80,33 @@ def download_music(key, config):
     cmd = f'yt-dlp --force-overwrite -f "ba" -x --audio-format vorbis {config["id"]} -o {name}'
     subprocess.check_call(cmd, shell=True)
 
-def save_audio_from_text(key, phrase):
-    audio, samp_rate = get_audio_from_text(phrase)
-    sf.write(key, audio, samp_rate, format="OGG", subtype="VORBIS")
-
-def perform_task(intent):
+def perform_task(intent, player):
     cmd = intent["command"]
     args = intent["arguments"]
     phrase = " ".join(args)
 
     if cmd == "play" and len(phrase) > 0:
         config = search_music(phrase)
-        return [runner.queue(save_audio_from_text, (f'Playing {config["title"]}',)),
-                runner.queue(download_music, (config,))]
+        out_phrase = f'Playing {config["title"]}'
+        # download_music(config)
     elif cmd == "repeat" and len(phrase) > 0:
-        return [runner.queue(save_audio_from_text, (phrase,))]
+        out_phrase = phrase
     elif (cmd == "stop") or (cmd == "false_positive"):
-        return []
+        return
     else:
-        phrase = "Sorry, could you please repeat?"
-        return [runner.queue(save_audio_from_text, (phrase,))]
+        out_phrase = "Sorry, could you please repeat?"
+    audio_file = BytesIO(get_audio_from_text(out_phrase))
+    player.queue(audio_file)
+
+import struct
+import numpy as np
+import soundfile as sf
+def save_audio(audio_data):
+    with open("out.wav", "wb") as f:
+        num_samples = len(audio_data) // 2  # assume 16-bit PCM
+        waveform = np.array(struct.unpack(str(num_samples) + "H", audio_data)).astype(np.int16)
+        sf.write(f, waveform, 16000)
+        #sf.write(f, audio, 16000, format="OGG", subtype="VORBIS")
+
+if __name__ == "__main__":
+    audio = get_audio_from_text("hello")

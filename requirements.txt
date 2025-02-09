@@ -1,14 +1,8 @@
-torch
-transformers
-speechbrain
-flask
-librosa
-yt-dlp
-scipy
-
+# client
 soundfile
 sounddevice
 webrtcvad
-numpy
-requests
 openwakeword
+yt-dlp
+requests
+regex

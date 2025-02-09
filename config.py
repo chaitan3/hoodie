@@ -1,2 +1,3 @@
-api_key="a7fb6b7b36ee4ed66b5546fac4690273"
+api_key="***REMOVED***"
 wake_keyword="alexa"
+base_url = "https://MODEL_URL/api"
