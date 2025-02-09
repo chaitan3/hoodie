@@ -71,7 +71,8 @@ def download_music(config):
     #with open(output_file, "rb") as f:
     #    audio = f.read()
     #os.remove(output_file)
-    return io.BytesIO(output_file)
+    #return io.BytesIO(output_file)
+    return output_file
 
 def get_weather():
     URL = 'https://api.weather.gov/gridpoints/BOX/69,91/forecast'
@@ -86,19 +87,23 @@ def perform_task(intent, player):
     args = intent["arguments"]
     phrase = " ".join(args)
 
-    if cmd == "stop" or len(phrase) == 0:
-        return
+    out_phrase = "Sorry, could you please repeat?"
+    if len(phrase) == 0:
+        if cmd == "stop":
+            player.stop()
+            return
+        elif cmd == "weather":
+            out_phrase = get_weather()
+        else:
+            status = False
+    elif cmd == "repeat":
+        out_phrase = phrase
     elif cmd == "play":
         config = search_music(phrase)
         out_phrase = f'Playing {config["title"]}.'
-    elif cmd == "weather":
-        out_phrase = get_weather()
-    elif cmd == "repeat":
-        out_phrase = phrase
     elif cmd == "llm":
         out_phrase = ask_llm_query(phrase)
     else:
-        out_phrase = "Sorry, could you please repeat?"
         status = False
     logging.info(("Output phrase:", out_phrase))
     sentences = re.split("[,!\.\?]", out_phrase)

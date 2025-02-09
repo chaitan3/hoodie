@@ -36,7 +36,7 @@ def main():
             logging.info("Waiting for wakeword")
             key, wake_audio = wakeword.wait_detect()
             logging.info(("Detected wakeword", key))
-            player.queue(beep_file)
+            #player.queue(beep_file)
 
             logging.info("Recording audio")
             audio = voice_activity.wait_inactive(min_record_time)
