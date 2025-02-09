@@ -69,6 +69,7 @@ class AudioPlayer(Thread):
                 if self.stream and (curr_time - start_time) > timeout_time:
                     start_time = curr_time
                     self.stream = None
+                    logging.info("Closed audio output stream")
                 sd.sleep(sleep_time)
 
     def _reset(self):
@@ -87,6 +88,7 @@ class AudioPlayer(Thread):
                     self.audio_stream = None
             else:
                 outdata[:,:].fill(0.0)
+        logging.info("Opened audio output stream")
         self.stream = sd.OutputStream(device=output_device_id, samplerate=self.audio_stream.samplerate,
                                channels=self.audio_stream.channels,
                                dtype=dtype,
