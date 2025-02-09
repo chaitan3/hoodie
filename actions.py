@@ -62,8 +62,7 @@ def search_music(phrase):
     config = json.loads(output.decode('utf-8'))
     return config
 
-def download_music(key, config):
-    name = os.path.splitext(key)[0]
+def download_music(config):
     cmd = f'yt-dlp --force-overwrite -f "ba" -x --audio-format vorbis {config["id"]} -o -'
     audio = subprocess.check_output(cmd, shell=True)
     return io.BytesIO(audio)
@@ -117,8 +116,10 @@ def load_audio():
     return audio
 
 if __name__ == "__main__":
+    config = search_music("Swiss Portrait - Patagonia")
+    print(download_music(config))
     #text = ask_llm_query("What is going on?")
-    text = get_weather()
+    #text = get_weather()
     #audio = get_audio_from_text("hello")
     #save_audio(audio)
     #audio = load_audio()
