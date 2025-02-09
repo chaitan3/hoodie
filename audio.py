@@ -25,6 +25,7 @@ output_sample_rate = 44100
 #blocksize = 0
 #input_sample_rate = 48000
 #input_channels = 1
+#output_sample_rate = 44100
 
 class AudioRecorder(object):
     def __init__(self):
