@@ -2,6 +2,7 @@ import requests
 import numpy as np
 from logger import logging
 import io
+import soundfile as sf
 
 from audio import AudioRecorder, AudioPlayer
 from wakeword import WakewordDetector
