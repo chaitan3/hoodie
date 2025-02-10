@@ -12,20 +12,20 @@ sleep_time = 50 #ms
 timeout_time = 10 #s
 
 # desktop
-input_device_id = 4
-output_device_id = 0
-blocksize = 0
-input_sample_rate = 16000
-input_channels = 1
-output_sample_rate = 44100
-
-# raspi
-#input_device_id = 3
-#output_device_id = 2
+#input_device_id = 4
+#output_device_id = 0
 #blocksize = 0
-#input_sample_rate = 48000
+#input_sample_rate = 16000
 #input_channels = 1
 #output_sample_rate = 44100
+
+# raspi
+input_device_id = 3
+output_device_id = 2
+blocksize = 0
+input_sample_rate = 48000
+input_channels = 1
+output_sample_rate = 44100
 
 class AudioRecorder(object):
     def __init__(self):
@@ -62,13 +62,15 @@ class AudioPlayer(Thread):
         start_time = time.time()
         while self.active:
             try:
-                self._play_file(self.files.pop(0))
+                audio_file = self.files.pop(0)
+                start_time = time.time()
+                self._play_file(audio_file)
                 if not self.play:
                     self._reset()
             except IndexError:
                 curr_time = time.time()
                 if self.stream and (curr_time - start_time) > timeout_time:
-                    start_time = curr_time
+                    self.stream.close()
                     self.stream = None
                     logging.info("Closed audio output stream")
                 sd.sleep(sleep_time)
