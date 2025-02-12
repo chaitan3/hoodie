@@ -38,14 +38,14 @@ def get_audio_from_text(text, model="tts-1"):
 
 def ask_llm_query(prompt, model="llama3:latest"):
     headers = {"Authorization": f"Bearer {api_key}"}
-    instruction = "You are a helpful assistant and you should respond in one short sentence."
+    instruction = "You are a helpful assistant and you should respond in one sentence."
     response = requests.post(f"{base_url}/chat/completions",
                              headers = headers,
                              json={
                                  "model": model,
                                  "messages": [
                                     {
-                                        "role": "developer",
+                                        "role": "system",
                                         "content": instruction
                                     },
                                     {
@@ -144,9 +144,11 @@ if __name__ == "__main__":
     #config = search_music("Swiss Portrait - Patagonia")
     #print(download_music(config))
     #text = ask_llm_query("What is going on?")
+    text = ask_llm_query("How long was the Ancient Egyptian Civilization active?")
+    print(text)
     #text = get_weather()
-    audio = get_audio_from_text("what is 2.2 multiplied by 4?")
-    save_audio(audio)
+    #audio = get_audio_from_text("what is 2.2 multiplied by 4?")
+    #save_audio(audio)
     #audio = load_audio()
     #text = get_text_from_audio(sys.argv[1], model="small")
     #print(text)
