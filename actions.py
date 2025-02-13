@@ -43,6 +43,7 @@ def ask_llm_query(prompt, model="llama3:latest"):
                              headers = headers,
                              json={
                                  "model": model,
+                                 #"features": {"web_search": True},
                                  "messages": [
                                     {
                                         "role": "system",
@@ -85,6 +86,15 @@ def get_weather():
     period = forecast['periods'][0]
     return period["detailedForecast"]
 
+import datetime
+def get_time():
+    now = datetime.datetime.now()
+    hours = str(now.hour % 12 or 12)  # Display noon and midnight correctly
+    minutes = now.minute
+    am_pm = 'AM' if now.hour < 12 else 'PM'
+    return f"The time is {hours} {minutes:02d} {am_pm}"
+
+
 def perform_task(intent, player):
     status = True
     cmd = intent["command"]
@@ -100,6 +110,8 @@ def perform_task(intent, player):
             return
         elif cmd == "weather":
             out_phrase = get_weather()
+        elif cmd == "time":
+            out_phrase = get_time()
         else:
             out_phrase = "Sorry, could you please repeat?"
             status = False
@@ -144,8 +156,10 @@ if __name__ == "__main__":
     #config = search_music("Swiss Portrait - Patagonia")
     #print(download_music(config))
     #text = ask_llm_query("What is going on?")
-    text = ask_llm_query("How long was the Ancient Egyptian Civilization active?")
+    #text = ask_llm_query("How long was the Ancient Egyptian Civilization active?")
+    text = ask_llm_query("what is the temperature in celcius in boston right now?")
     print(text)
+    #Eprint(get_time())
     #text = get_weather()
     #audio = get_audio_from_text("what is 2.2 multiplied by 4?")
     #save_audio(audio)

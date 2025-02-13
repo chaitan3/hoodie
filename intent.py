@@ -24,7 +24,7 @@ def parse_text(text):
         elif len(tokens) > 1:
             cmd = remove_punctuation(tokens[1])
             args = tokens[2:]
-    if cmd not in ["play", "repeat", "stop", "false_positive", "weather"]:
+    if cmd not in ["play", "repeat", "stop", "false_positive", "weather", "time"]:
         args = [cmd] + args
         cmd = "llm"
     intent["command"] = cmd
