@@ -36,7 +36,7 @@ def get_audio_from_text(text, model="tts-1"):
     audio = response.content
     return io.BytesIO(audio)
 
-def ask_llm_query(prompt, model="llama3:latest"):
+def ask_llm_query(prompt, model="qwen3:14b"):
     headers = {"Authorization": f"Bearer {api_key}"}
     instruction = "You are a helpful assistant and you should respond in one sentence."
     response = requests.post(f"{base_url}/chat/completions",
@@ -61,6 +61,98 @@ def ask_llm_query(prompt, model="llama3:latest"):
     text = text.replace('\n', ' ')
     text = text.replace('...', ',')
     return text
+
+def ask_llm_query_tool(prompt, model="qwen3:4b"):
+    headers = {"Authorization": f"Bearer {api_key}"}
+    instruction = "You are a helpful assistant and you should respond in one sentence."
+    response = requests.post(f"{base_url}/chat/completions",
+                             headers = headers,
+                             json={
+                                 "model": model,
+                                 #"features": {"web_search": True},
+                                 "messages": [
+                                    {
+                                        "role": "system",
+                                        "content": instruction
+                                    },
+                                    {
+                                        "role": "user",
+                                        "content": prompt
+                                    }
+                                ],
+                                "tools": [{
+                                  'type': 'function',
+                                  'function': {
+                                    'name': 'get_current_weather',
+                                    'description': 'Get the current weather for a city',
+                                    'parameters': {
+                                      'type': 'object',
+                                      'properties': {
+                                        'city': {
+                                          'type': 'string',
+                                          'description': 'The name of the city',
+                                        },
+                                      },
+                                      'required': ['city'],
+                                    },
+                                  },
+                                }],
+                            })
+    assert(response.status_code == 200)
+    response = response.json()
+    print(response)
+    message = response["choices"][0]["message"]
+    tool_call = message["tool_calls"][0]
+    tool_call_id = tool_call["id"]
+    text = get_weather()
+    print(text)
+    response = requests.post(f"{base_url}/chat/completions",
+                             headers = headers,
+                             json={
+                                 "model": model,
+                                 #"features": {"web_search": True},
+                                 "messages": [
+                                    {
+                                        "role": "system",
+                                        "content": instruction
+                                    },
+                                    {
+                                        "role": "user",
+                                        "content": prompt
+                                    },
+                                    message,
+                                    {
+                                        "role": "tool",
+                                        "tool_call_id": tool_call["id"],
+                                        "content": text
+                                    }
+                                ],
+                                "tools": [{
+                                  'type': 'function',
+                                  'function': {
+                                    'name': 'get_current_weather',
+                                    'description': 'Get the current weather for a city',
+                                    'parameters': {
+                                      'type': 'object',
+                                      'properties': {
+                                        'city': {
+                                          'type': 'string',
+                                          'description': 'The name of the city',
+                                        },
+                                      },
+                                      'required': ['city'],
+                                    },
+                                  },
+                                }],
+                            })
+    assert(response.status_code == 200)
+    response = response.json()
+    text = response["choices"][0]["message"]["content"]
+    print(response)
+    text = text.replace('\n', ' ')
+    text = text.replace('...', ',')
+    return text
+
 
 def search_music(phrase):
     cmd = f'yt-dlp --dump-json ytsearch1:"{phrase}"'
@@ -155,9 +247,9 @@ if __name__ == "__main__":
     import sys
     #config = search_music("Swiss Portrait - Patagonia")
     #print(download_music(config))
-    #text = ask_llm_query("What is going on?")
+    #text = ask_llm_query("/nothink What is going on?")
     #text = ask_llm_query("How long was the Ancient Egyptian Civilization active?")
-    text = ask_llm_query("what is the temperature in celcius in boston right now?")
+    text = ask_llm_query_tool("/nothink what is the temperature in boston right now?")
     print(text)
     #Eprint(get_time())
     #text = get_weather()
