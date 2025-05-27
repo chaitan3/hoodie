@@ -12,21 +12,21 @@ sleep_time = 50 #ms
 timeout_time = 10 #s
 
 # desktop
-#input_device_id = 4
-#output_device_id = 0
-#blocksize = 0
-#input_sample_rate = 16000
-#input_channels = 1
-#output_sample_rate = 44100
-
-# raspi
 input_device_id = 3
-output_device_id = 2
+output_device_id = 3
 blocksize = 0
-input_sample_rate = 48000
+input_sample_rate = 16000
 input_channels = 1
 output_sample_rate = 44100
 
+# raspi
+#input_device_id = 3
+#output_device_id = 2
+#blocksize = 0
+#input_sample_rate = 48000
+#input_channels = 1
+#output_sample_rate = 44100
+#
 class AudioRecorder(object):
     def __init__(self):
         self.sample_rate = input_sample_rate
@@ -127,7 +127,7 @@ if __name__ == "__main__":
     a.queue("beep.ogg")
     #a.queue("test2.ogg")
     #a.queue("test3.ogg")
-    #a.queue("beep.ogg")
+    a.queue("beep.ogg")
     while len(a.files) > 0:
         sd.sleep(sleep_time)
     a.stop(close=True)

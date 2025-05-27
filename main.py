@@ -7,21 +7,20 @@ import soundfile as sf
 from audio import AudioRecorder, AudioPlayer
 from wakeword import WakewordDetector
 from vad import VoiceActivityDetector
+from agent import create_agent
 
 from actions import perform_task, get_text_from_audio
-from intent import parse_text
 
 from config import api_key
 
 min_record_time = 2.5 #seconds
 beep_file = "beep.ogg"
+agent = create_agent()
 
 def request_handler(audio_file, player):
     text = get_text_from_audio(audio_file)
-    intent = parse_text(text)
-    status = perform_task(intent, player)
+    status = perform_task(text, agent, player)
     return status
-    
        
 def main():
     failure_count = 0
@@ -36,14 +35,15 @@ def main():
             logging.info("Waiting for wakeword")
             key, wake_audio = wakeword.wait_detect()
             logging.info(("Detected wakeword", key))
-            #player.queue(beep_file)
+            player.queue(beep_file)
 
             logging.info("Recording audio")
             audio = voice_activity.wait_inactive(min_record_time)
             logging.info("Stopped recording audio")
 
             audio_file = io.BytesIO()
-            audio_data = np.concatenate((wake_audio, audio))
+            #audio_data = np.concatenate((wake_audio, audio))
+            audio_data = np.concatenate((audio,))
             recorder.write_file(audio_file, audio_data)
             audio_file.seek(0)
 
