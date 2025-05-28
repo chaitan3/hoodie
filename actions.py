@@ -63,10 +63,14 @@ def ask_llm_query(prompt, model="qwen3:14b"):
 
 def perform_task(phrase, agent, player):
     logging.info(("Input phrase", phrase))
-    out_phrase = agent.run_sync(phrase).output
+    out_phrase = agent(phrase).output
     out_phrase = out_phrase.replace("<think>\n\n</think>\n\n", "")
     logging.info(("Output phrase", out_phrase))
     player.queue(get_audio_from_text(out_phrase))
+    if len(agent.deps.music_config) > 0:
+        audio = tools.download_music(agent.deps.music_config)
+        player.queue(audio)
+        agent.deps.music_config = {}
     return True
 
 if __name__ == "__main__":
