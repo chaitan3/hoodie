@@ -12,20 +12,20 @@ sleep_time = 50 #ms
 timeout_time = 10 #s
 
 # desktop
-input_device_id = 10
-output_device_id = 11
-blocksize = 0
-input_sample_rate = 48000
-input_channels = 1
-output_sample_rate = 44100
-
-# raspi
-#input_device_id = 3
-#output_device_id = 2
+#input_device_id = 10
+#output_device_id = 11
 #blocksize = 0
 #input_sample_rate = 48000
 #input_channels = 1
 #output_sample_rate = 44100
+
+# raspi
+input_device_id = 3
+output_device_id = 2
+blocksize = 0
+input_sample_rate = 48000
+input_channels = 1
+output_sample_rate = 44100
 #
 class AudioRecorder(object):
     def __init__(self):

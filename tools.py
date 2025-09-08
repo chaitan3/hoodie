@@ -18,11 +18,13 @@ def get_time():
     return f"The time is {hours} {minutes:02d} {am_pm}"
 
 def get_weather():
-    URL = 'https://api.weather.gov/gridpoints/BOX/69,91/forecast'
+    URL = 'https://api.weather.gov/gridpoints/BOX/73,90/forecast'
     response = requests.get(URL)
     forecast = response.json()['properties']
     period = forecast['periods'][0]
-    return period["detailedForecast"]
+    tempF = int(period["temperature"])
+    tempC = int((tempF - 32) * 5/9)
+    return period["detailedForecast"].replace(str(tempF), str(tempC))
 
 def play_music(ctx: RunContext[ToolUsage], phrase: str):
     cmd = f'yt-dlp --dump-json ytsearch1:"{phrase}"'

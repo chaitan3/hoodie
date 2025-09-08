@@ -35,7 +35,7 @@ def get_audio_from_text(text, model="tts-1"):
     audio = response.content
     return io.BytesIO(audio)
 
-def ask_llm_query(prompt, model="qwen3:14b"):
+def ask_llm_query(prompt, model="qwen3:4b"):
     headers = {"Authorization": f"Bearer {api_key}"}
     instruction = "You are a helpful assistant and you should respond in one sentence."
     response = requests.post(f"{base_url}/chat/completions",
@@ -92,8 +92,8 @@ if __name__ == "__main__":
     #config = search_music("Swiss Portrait - Patagonia")
     #print(download_music(config))
     #text = ask_llm_query("/nothink What is going on?")
-    #text = ask_llm_query("How long was the Ancient Egyptian Civilization active?")
-    text = ask_llm_query_tool("/nothink what is the temperature in boston right now?")
+    text = ask_llm_query("How long was the Ancient Egyptian Civilization active?")
+    text = ask_llm_query("What is the time right now?")
     print(text)
     #Eprint(get_time())
     #text = get_weather()

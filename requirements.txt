@@ -8,3 +8,4 @@ requests
 regex
 resampy
 inflect
+pydantic_ai

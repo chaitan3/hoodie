@@ -1,3 +1,5 @@
 api_key="***REMOVED***"
 wake_keyword="alexa"
 base_url = "https://***REMOVED***/api"
+google_pse_api_key="REMOVED"
+google_pse_id="b02c1666f0f37471c"
