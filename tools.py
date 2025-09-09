@@ -5,6 +5,7 @@ import json
 
 from pydantic_ai import RunContext, Agent
 from dataclasses import dataclass
+from logger import logging
 
 @dataclass
 class ToolUsage:
@@ -15,7 +16,9 @@ def get_time():
     hours = str(now.hour % 12 or 12)  # Display noon and midnight correctly
     minutes = now.minute
     am_pm = 'AM' if now.hour < 12 else 'PM'
-    return f"The time is {hours} {minutes:02d} {am_pm}"
+    output = f"The time is {hours} {minutes:02d} {am_pm}"
+    logging.info("get_time output is: {}".format(output))
+    return output
 
 def get_weather():
     URL = 'https://api.weather.gov/gridpoints/BOX/73,90/forecast'
@@ -24,7 +27,10 @@ def get_weather():
     period = forecast['periods'][0]
     tempF = int(period["temperature"])
     tempC = int((tempF - 32) * 5/9)
-    return period["detailedForecast"].replace(str(tempF), str(tempC))
+    output = period["detailedForecast"].replace(str(tempF), str(tempC))
+    logging.info("get_weather output is: {}".format(output))
+    return output
+    return output
 
 def play_music(ctx: RunContext[ToolUsage], phrase: str):
     cmd = f'yt-dlp --dump-json ytsearch1:"{phrase}"'
@@ -33,7 +39,9 @@ def play_music(ctx: RunContext[ToolUsage], phrase: str):
     #audio = download_music(config)
     #player.enqueue(audio)
     ctx.deps.music_config = config
-    return config["title"]
+    output = "The requested song is " + config["title"]
+    logging.info("play_music({}) output is: {}".format(phrase, output))
+    return output
 
 def download_music(config):
     output_file = "out"

@@ -21,17 +21,19 @@ timeout_time = 10 #s
 
 # raspi
 input_device_id = 3
-output_device_id = 2
+output_device_id = 5
 blocksize = 0
 input_sample_rate = 48000
 input_channels = 1
-output_sample_rate = 44100
+#output_sample_rate = 44100
+output_sample_rate = 48000
 #
 class AudioRecorder(object):
     def __init__(self):
         self.sample_rate = input_sample_rate
         
     def read_callback(self, callback, frames):
+        logging.info("Opened audio input stream with sample rate {} and channels {}".format(self.sample_rate, input_channels))
         with sd.InputStream(device=input_device_id, samplerate=self.sample_rate,
                            channels=input_channels,
                            latency=0.1,
@@ -91,7 +93,7 @@ class AudioPlayer(Thread):
                     self.audio_stream = None
             else:
                 outdata[:,:].fill(0.0)
-        logging.info("Opened audio output stream")
+        logging.info("Opened audio output stream with sample rate {} and channels {}".format(self.audio_stream.samplerate, self.audio_stream.channels))
         self.stream = sd.OutputStream(device=output_device_id, samplerate=self.audio_stream.samplerate,
                                channels=self.audio_stream.channels,
                                dtype=dtype,
