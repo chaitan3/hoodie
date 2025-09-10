@@ -11,7 +11,7 @@ from agent import Assistant
 
 from actions import perform_task, get_text_from_audio
 
-from config import api_key
+import config
 
 min_record_time = 2.5 #seconds
 beep_file = "beep.ogg"
@@ -36,15 +36,21 @@ def main():
             key, wake_audio = wakeword.wait_detect()
             logging.info(("Detected wakeword", key))
             #player.queue(beep_file)
-
+            
             logging.info("Recording audio")
             audio = voice_activity.wait_inactive(min_record_time)
             logging.info("Stopped recording audio")
 
             audio_file = io.BytesIO()
-            #audio_data = np.concatenate((wake_audio, audio))
-            audio_data = np.concatenate((audio,))
-            recorder.write_file(audio_file, audio_data)
+            recorder.write_file(audio_file, wake_audio)
+            audio_file.seek(0)
+            wake_text = get_text_from_audio(audio_file)
+            if wake_text.strip().lower() != config.wake_keyword:
+                logging.info("Invalid wake up from sleep, prediction: {}".format(wake_text))
+                continue
+
+            audio_file = io.BytesIO()
+            recorder.write_file(audio_file, audio)
             audio_file.seek(0)
 
             logging.info("Sending request to server")
