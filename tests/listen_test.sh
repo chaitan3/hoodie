@@ -43,6 +43,13 @@ with wave.open(f"{out_dir}/listen.wav", "wb") as w:
 with wave.open(f"{out_dir}/silence.wav", "wb") as w:
     w.setnchannels(ch); w.setsampwidth(sw); w.setframerate(fr)
     w.writeframes(silence(4.0))
+
+# Same, but with a >600 ms pause between the wake word and the command: the
+# wake tail's early end-of-speech must be ignored (min_utterance_ms) so the
+# command is captured as one turn instead of a truncated fragment.
+with wave.open(f"{out_dir}/listen_pause.wav", "wb") as w:
+    w.setnchannels(ch); w.setsampwidth(sw); w.setframerate(fr)
+    w.writeframes(silence(3.0) + frames + silence(1.0) + frames + silence(1.5))
 PY
 
 python3 "$ROOT/tests/mock_openai_server.py" --port "$PORT" >"$WORK/mock.log" 2>&1 &
@@ -70,6 +77,18 @@ grep -q "reply: mock final reply" "$WORK/run.log" || fail "missing agent reply"
 size=$(stat -c%s "$WORK/reply.wav")
 [[ "$size" -gt 10000 ]] || fail "reply audio too small: $size bytes"
 pass "wake -> ASR -> agent -> TTS (reply $size bytes)"
+
+# --- A pause after the wake word must not truncate the command ---------------
+if ! "$BIN" -c "$CONFIG" --listen-wav "$WORK/listen_pause.wav" --out "$WORK/pause_reply.wav" \
+    >"$WORK/pause.log" 2>&1; then
+  fail "pause run failed: $(tail -1 "$WORK/pause.log")"
+fi
+turns=$(grep -c "transcript:" "$WORK/pause.log" || true)
+[[ "$turns" == "1" ]] || fail "expected one turn after a pause, got $turns"
+dur=$(grep -oE "\([0-9]+\.[0-9]+ s," "$WORK/pause.log" | head -1 | tr -cd '0-9.')
+[[ -n "$dur" ]] || fail "no utterance logged for the pause case"
+awk "BEGIN{exit !($dur > 1.5)}" || fail "utterance too short after a pause: ${dur}s"
+pass "pause after wake captured as one turn (utterance ${dur}s)"
 
 # --- Silence must not start a turn -------------------------------------------
 if ! "$BIN" -c "$CONFIG" --listen-wav "$WORK/silence.wav" --out "$WORK/none.wav" \

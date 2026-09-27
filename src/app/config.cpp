@@ -89,6 +89,7 @@ Config Config::load(const std::string& path) {
   const json& caps = sub(root, "capabilities");
   const json& wake = sub(root, "wakeword");
   const json& audio = sub(root, "audio");
+  const json& assistant = sub(root, "assistant");
 
   cfg.server.base_url = get_string(server, "base_url", cfg.server.base_url);
   cfg.server.api_key = get_string(server, "api_key", cfg.server.api_key);
@@ -122,6 +123,11 @@ Config Config::load(const std::string& path) {
   cfg.audio.capture_sample_rate =
       get_int(audio, "capture_sample_rate", cfg.audio.capture_sample_rate);
 
+  cfg.assistant.min_utterance_ms =
+      get_int(assistant, "min_utterance_ms", cfg.assistant.min_utterance_ms);
+  cfg.assistant.listen_timeout_s =
+      get_double(assistant, "listen_timeout_s", cfg.assistant.listen_timeout_s);
+
   // Environment overrides win over the file, so secrets can stay out of it.
   apply_env_override("HOODIE_API_KEY", cfg.server.api_key);
   apply_env_override("HOODIE_BASE_URL", cfg.server.base_url);
@@ -131,6 +137,12 @@ Config Config::load(const std::string& path) {
   }
   if (cfg.audio.capture_sample_rate <= 0) {
     throw std::runtime_error("config: audio.capture_sample_rate must be positive");
+  }
+  if (cfg.assistant.min_utterance_ms < 0) {
+    throw std::runtime_error("config: assistant.min_utterance_ms must not be negative");
+  }
+  if (cfg.assistant.listen_timeout_s <= 0.0) {
+    throw std::runtime_error("config: assistant.listen_timeout_s must be positive");
   }
   return cfg;
 }
@@ -177,7 +189,9 @@ std::string Config::summary() const {
       << "\n"
       << "  audio.output_device  = "
       << (audio.output_device.empty() ? "<default>" : audio.output_device) << "\n"
-      << "  audio.capture_rate   = " << audio.capture_sample_rate << "\n";
+      << "  audio.capture_rate   = " << audio.capture_sample_rate << "\n"
+      << "  assistant.min_utterance_ms = " << assistant.min_utterance_ms << "\n"
+      << "  assistant.listen_timeout_s = " << assistant.listen_timeout_s << "\n";
   return out.str();
 }
 

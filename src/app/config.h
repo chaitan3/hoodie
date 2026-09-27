@@ -48,11 +48,21 @@ struct AudioConfig {
   int capture_sample_rate = 48000;
 };
 
+// Voice-loop tuning for the orchestrator (src/app/assistant.cpp).
+struct AssistantConfig {
+  // Ignore the endpointer's end-of-speech until the utterance holds at least
+  // this much audio. The wake-word tail otherwise trips a SpeechStart and a
+  // short pause ends the utterance before the command. 0 disables the gate.
+  int min_utterance_ms = 1500;
+  double listen_timeout_s = 8.0;  // max silence after wake before giving up
+};
+
 struct Config {
   ServerConfig server;
   Capabilities capabilities;
   WakeWordConfig wakeword;
   AudioConfig audio;
+  AssistantConfig assistant;
 
   // Load and validate configuration. Throws std::runtime_error on failure.
   // Applies HOODIE_API_KEY / HOODIE_BASE_URL environment overrides.

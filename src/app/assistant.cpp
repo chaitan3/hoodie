@@ -7,6 +7,7 @@
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -47,6 +48,15 @@ wake::WakeWordConfig make_wake_config(const Config& config) {
 
 double elapsed_seconds(std::chrono::steady_clock::time_point since) {
   return std::chrono::duration<double>(std::chrono::steady_clock::now() - since).count();
+}
+
+std::string wall_clock(std::chrono::system_clock::time_point when) {
+  const std::time_t seconds = std::chrono::system_clock::to_time_t(when);
+  std::tm local{};
+  localtime_r(&seconds, &local);
+  char buffer[16];
+  std::strftime(buffer, sizeof(buffer), "%H:%M:%S", &local);
+  return buffer;
 }
 
 }  // namespace
@@ -96,7 +106,18 @@ void Assistant::set_state(State state) {
 }
 
 void Assistant::on_endpoint(wake::Endpointer::Event event, std::size_t /*frame_index*/) {
-  if (event == wake::Endpointer::Event::SpeechEnd) utterance_ready_ = true;
+  if (event != wake::Endpointer::Event::SpeechEnd) return;
+  // The wake-word tail trips SpeechStart, so a short pause right after the wake
+  // ends the utterance before the user's command. Ignore end-of-speech until
+  // the utterance holds at least min_utterance_seconds of audio; the endpointer
+  // resets, and a later command produces a fresh SpeechStart/SpeechEnd we honor.
+  const double seconds = utterance_.duration_seconds();
+  if (seconds < options_.min_utterance_seconds) {
+    spdlog::debug("ignoring end at {:.2f}s (< min {:.2f}s)", seconds,
+                  options_.min_utterance_seconds);
+    return;
+  }
+  utterance_ready_ = true;
 }
 
 void Assistant::enter_listening() {
@@ -107,6 +128,7 @@ void Assistant::enter_listening() {
   vad_.reset();
   endpointer_.reset();
   listening_since_ = std::chrono::steady_clock::now();
+  utterance_started_at_ = std::chrono::system_clock::now();
   set_state(State::Listening);
 }
 
@@ -223,9 +245,11 @@ void Assistant::respond() {
   const double rms = utterance_.samples.empty()
                          ? 0.0
                          : std::sqrt(sum_sq / static_cast<double>(utterance_.samples.size()));
-  spdlog::info("utterance: {:.2f} s, {} samples @ {} Hz, peak={} rms={:.1f}, ring_dropped={}",
-               utterance_.duration_seconds(), utterance_.samples.size(), utterance_.sample_rate,
-               peak, rms, ring_dropped_.load(std::memory_order_relaxed));
+  spdlog::info(
+      "utterance: {} -> {} ({:.2f} s, {} samples @ {} Hz, peak={} rms={:.1f}, ring_dropped={})",
+      wall_clock(utterance_started_at_), wall_clock(std::chrono::system_clock::now()),
+      utterance_.duration_seconds(), utterance_.samples.size(), utterance_.sample_rate, peak, rms,
+      ring_dropped_.load(std::memory_order_relaxed));
   dump_utterance();
 
   std::string transcript;

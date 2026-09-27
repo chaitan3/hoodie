@@ -31,6 +31,8 @@ struct AssistantOptions {
   bool once = false;           // handle a single turn, then return
   double idle_timeout_seconds = 0.0;    // 0 = wait forever for the wake word
   double listen_timeout_seconds = 8.0;  // max silence after wake before giving up
+  // Ignore end-of-speech until the utterance reaches this duration (0 = off).
+  double min_utterance_seconds = 1.5;
 };
 
 // The voice state machine:
@@ -102,6 +104,7 @@ class Assistant {
   bool wake_high_ = false;  // rising-edge guard so a stale context does not re-trigger
   int utterance_counter_ = 0;
   std::chrono::steady_clock::time_point listening_since_{};
+  std::chrono::system_clock::time_point utterance_started_at_{};
 
   util::CancelToken cancel_;
   std::atomic<bool> stopping_{false};

@@ -56,6 +56,7 @@ struct CliOptions {
   bool listen_once = false;
   std::string listen_wav;
   std::string save_utterances_dir;
+  int min_utterance_ms = -1;  // <0 = use config
   float threshold_override = 0.0f;
 };
 
@@ -92,6 +93,7 @@ void print_usage(const char* argv0) {
       << "      --listen-wav <file>  Replay a WAV through the voice loop (no mic)\n"
       << "      --once               Handle a single turn, then exit\n"
       << "      --save-utterances <d>  Save each utterance WAV sent to ASR in dir <d>\n"
+      << "      --min-utterance-ms <n> Ignore end-of-speech before n ms (default 1500)\n"
       << "      --out <file>         Write the reply audio to a WAV instead of playing\n\n"
       << "Server round trips:\n"
       << "      --transcribe <file>  Transcribe an audio file, print the text\n"
@@ -216,6 +218,15 @@ bool parse_args(int argc, char** argv, CliOptions& options, std::string& error) 
       if (!need_value(i, arg, options.listen_wav)) return false;
     } else if (arg == "--save-utterances") {
       if (!need_value(i, arg, options.save_utterances_dir)) return false;
+    } else if (arg == "--min-utterance-ms") {
+      std::string value;
+      if (!need_value(i, arg, value)) return false;
+      try {
+        options.min_utterance_ms = std::stoi(value);
+      } catch (const std::exception&) {
+        error = "invalid --min-utterance-ms value: " + value;
+        return false;
+      }
     } else if (arg == "--threshold") {
       std::string value;
       if (!need_value(i, arg, value)) return false;
@@ -449,6 +460,11 @@ int main(int argc, char** argv) {
       assistant_options.out_file = options.out_file;
       assistant_options.dump_utterance_dir = options.save_utterances_dir;
       assistant_options.once = options.listen_once;
+      assistant_options.listen_timeout_seconds = config.assistant.listen_timeout_s;
+      const int min_utterance_ms = options.min_utterance_ms >= 0
+                                       ? options.min_utterance_ms
+                                       : config.assistant.min_utterance_ms;
+      assistant_options.min_utterance_seconds = static_cast<double>(min_utterance_ms) / 1000.0;
       hoodie::app::Assistant assistant(config, std::move(assistant_options));
       if (!options.listen_wav.empty()) {
         return assistant.run_file(options.listen_wav);

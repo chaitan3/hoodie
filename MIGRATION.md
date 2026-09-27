@@ -104,6 +104,16 @@ Decisions assumed (confirmed):
   too short to score under the gate), adds a room-tone-noise negative that
   reproduces `max≈0.98 @ 0.48 s` with the gate off, and asserts the toggle —
   PASSING.
+- **Step 8 (done, minimum utterance):** end-of-speech is ignored until the
+  utterance holds `assistant.min_utterance_ms` (default 1500; CLI
+  `--min-utterance-ms`; 0 disables). Fixes the wake-word-tail truncation: the
+  tail trips `SpeechStart`, and a natural pause then ends the utterance at
+  ~0.6 s — exactly the endpointer's silence window — so ASR received a fragment
+  and returned empty. The endpointer keeps running; only its *end* event is
+  filtered, so a later command produces a fresh `SpeechStart`/`SpeechEnd` that
+  is honored. `assistant.listen_timeout_s` is config too, and the utterance log
+  now shows the wall-clock start -> end. `tests/listen_test.sh` adds a pause
+  fixture (wake + 1 s gap + command) and asserts a single ~2.3 s turn.
 
 ---
 

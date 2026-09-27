@@ -30,5 +30,9 @@
     "input_device": "",
     "output_device": "",
     "capture_sample_rate": 48000
+  },
+  "assistant": {
+    "min_utterance_ms": 1500,
+    "listen_timeout_s": 8.0
   }
 }
