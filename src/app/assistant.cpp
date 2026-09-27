@@ -3,8 +3,10 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <cmath>
 #include <csignal>
 #include <cstdio>
+#include <cstdlib>
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -209,7 +211,21 @@ void Assistant::dump_utterance() {
 
 void Assistant::respond() {
   set_state(State::Thinking);
-  spdlog::info("utterance: {:.2f} s", utterance_.duration_seconds());
+
+  // Cheap capture diagnostics: a garbage/silent utterance shows up in peak/rms,
+  // and ring_dropped reveals whether the live loop is outrunning capture.
+  int peak = 0;
+  double sum_sq = 0.0;
+  for (int16_t sample : utterance_.samples) {
+    peak = std::max(peak, std::abs(static_cast<int>(sample)));
+    sum_sq += static_cast<double>(sample) * static_cast<double>(sample);
+  }
+  const double rms = utterance_.samples.empty()
+                         ? 0.0
+                         : std::sqrt(sum_sq / static_cast<double>(utterance_.samples.size()));
+  spdlog::info("utterance: {:.2f} s, {} samples @ {} Hz, peak={} rms={:.1f}, ring_dropped={}",
+               utterance_.duration_seconds(), utterance_.samples.size(), utterance_.sample_rate,
+               peak, rms, ring_dropped_.load(std::memory_order_relaxed));
   dump_utterance();
 
   std::string transcript;
@@ -286,7 +302,11 @@ int Assistant::run() {
 
   capture_ = std::make_unique<audio::AudioCapture>(capture_options);
   capture_->start([this](const int16_t* samples, std::size_t frames, int channels) {
-    ring_.write(samples, frames * static_cast<std::size_t>(channels));
+    const std::size_t count = frames * static_cast<std::size_t>(channels);
+    const std::size_t written = ring_.write(samples, count);
+    if (written < count) {
+      ring_dropped_.fetch_add(count - written, std::memory_order_relaxed);
+    }
   });
   capture_rate_ = capture_->sample_rate();
   capture_channels_ = capture_->channels();

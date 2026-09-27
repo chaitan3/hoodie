@@ -105,6 +105,7 @@ class Assistant {
 
   util::CancelToken cancel_;
   std::atomic<bool> stopping_{false};
+  std::atomic<std::size_t> ring_dropped_{0};  // capture samples dropped under load
 };
 
 }  // namespace hoodie::app
