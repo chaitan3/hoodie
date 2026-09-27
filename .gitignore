@@ -1,0 +1,31 @@
+# Build output
+/build/
+/build-*/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+*.o
+*.a
+*.so
+*.dylib
+
+# Local config / secrets
+config/hoodie.json
+.env
+
+# Downloaded models (fetch with scripts/fetch_models.sh)
+models/*.onnx
+models/*.tflite
+
+# Test audio fixtures (fetch/generate; see tests/wake_test.sh)
+tests/data/*.wav
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Python (legacy client, kept while migrating)
+__pycache__/
+*.pyc
