@@ -91,17 +91,20 @@ mic (48k) -> WakeWord (openwakeword, 16k) -> VAD (webrtcvad) -> record whole com
           -> AudioPlayer thread plays file
 ```
 
+The original Python sources now live under `legacy/` (kept for reference; they
+are no longer built or run).
+
 Known defects to fix during the port (do **not** port them):
 
 | # | Issue | Location |
 |---|---|---|
-| 1 | Failure path references undefined `audio_data`; `perform_task` always returns `True`, so failure handling is dead code | `main.py:59-62`, `actions.py:75` |
-| 2 | `wait_inactive` stops on speech **onset** (approach looks inverted) instead of after silence | `vad.py:21-24` |
-| 3 | Wake word re-verified by ASR against literal `"alexa"` | `main.py:47-50` |
-| 4 | Wake word downsamples by raw decimation, no anti-alias filter | `wakeword.py:38` |
-| 5 | Hardcoded device IDs, toggled by comments (desktop vs Pi) | `audio.py:14-29` |
-| 6 | Live API key committed in source | `config.py:1` |
-| 7 | `yt-dlp` invoked with `shell=True` on LLM-provided text | `tools.py:36,48` |
+| 1 | Failure path references undefined `audio_data`; `perform_task` always returns `True`, so failure handling is dead code | `legacy/main.py:59-62`, `legacy/actions.py:75` |
+| 2 | `wait_inactive` stops on speech **onset** (approach looks inverted) instead of after silence | `legacy/vad.py:21-24` |
+| 3 | Wake word re-verified by ASR against literal `"alexa"` | `legacy/main.py:47-50` |
+| 4 | Wake word downsamples by raw decimation, no anti-alias filter | `legacy/wakeword.py:38` |
+| 5 | Hardcoded device IDs, toggled by comments (desktop vs Pi) | `legacy/audio.py:14-29` |
+| 6 | Live API key committed in source | `legacy/config.py:1` |
+| 7 | `yt-dlp` invoked with `shell=True` on LLM-provided text | `legacy/tools.py:36,48` |
 | 8 | No cancellation / barge-in; blocking `requests` | everywhere |
 
 ---
