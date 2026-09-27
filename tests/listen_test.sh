@@ -90,6 +90,18 @@ dur=$(grep -oE "\([0-9]+\.[0-9]+ s," "$WORK/pause.log" | head -1 | tr -cd '0-9.'
 awk "BEGIN{exit !($dur > 1.5)}" || fail "utterance too short after a pause: ${dur}s"
 pass "pause after wake captured as one turn (utterance ${dur}s)"
 
+# --- Tiny input blocks must not drop utterance audio -------------------------
+# The resampler emits nothing for very small blocks; the utterance must keep
+# those samples anyway (regression: it kept only a fraction of the span).
+if ! "$BIN" -c "$CONFIG" --listen-wav "$WORK/listen_pause.wav" --wav-block-frames 1 \
+    --out "$WORK/tiny_reply.wav" >"$WORK/tiny.log" 2>&1; then
+  fail "tiny-block run failed: $(tail -1 "$WORK/tiny.log")"
+fi
+dur=$(grep -oE "\([0-9]+\.[0-9]+ s," "$WORK/tiny.log" | head -1 | tr -cd '0-9.')
+[[ -n "$dur" ]] || fail "no utterance logged for the tiny-block case"
+awk "BEGIN{exit !($dur > 1.5)}" || fail "utterance too short with tiny blocks: ${dur}s"
+pass "tiny input blocks keep the full utterance (${dur}s)"
+
 # --- Silence must not start a turn -------------------------------------------
 if ! "$BIN" -c "$CONFIG" --listen-wav "$WORK/silence.wav" --out "$WORK/none.wav" \
     >"$WORK/silence.log" 2>&1; then

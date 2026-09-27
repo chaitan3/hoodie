@@ -57,6 +57,7 @@ struct CliOptions {
   std::string listen_wav;
   std::string save_utterances_dir;
   int min_utterance_ms = -1;  // <0 = use config
+  int wav_block_frames = 1024;
   float threshold_override = 0.0f;
 };
 
@@ -225,6 +226,15 @@ bool parse_args(int argc, char** argv, CliOptions& options, std::string& error) 
         options.min_utterance_ms = std::stoi(value);
       } catch (const std::exception&) {
         error = "invalid --min-utterance-ms value: " + value;
+        return false;
+      }
+    } else if (arg == "--wav-block-frames") {
+      std::string value;
+      if (!need_value(i, arg, value)) return false;
+      try {
+        options.wav_block_frames = std::stoi(value);
+      } catch (const std::exception&) {
+        error = "invalid --wav-block-frames value: " + value;
         return false;
       }
     } else if (arg == "--threshold") {
@@ -465,6 +475,7 @@ int main(int argc, char** argv) {
                                        ? options.min_utterance_ms
                                        : config.assistant.min_utterance_ms;
       assistant_options.min_utterance_seconds = static_cast<double>(min_utterance_ms) / 1000.0;
+      assistant_options.file_block_frames = options.wav_block_frames;
       hoodie::app::Assistant assistant(config, std::move(assistant_options));
       if (!options.listen_wav.empty()) {
         return assistant.run_file(options.listen_wav);

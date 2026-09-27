@@ -32,7 +32,6 @@ constexpr const char* kDefaultSystemPrompt =
     "You are a helpful assistant. Reply in one short sentence.";
 constexpr auto kPollInterval = std::chrono::milliseconds(5);
 constexpr std::size_t kScratchSamples = 8192;  // interleaved capture samples
-constexpr std::size_t kBlockFrames = 1024;     // run_file block size (frames)
 
 wake::WakeWordConfig make_wake_config(const Config& config) {
   wake::WakeWordConfig wc;
@@ -173,10 +172,10 @@ audio::AudioFrame Assistant::make_mono_block(std::size_t samples) {
 void Assistant::process_block(const audio::AudioFrame& mono) {
   pcm16k_.clear();
   to_16k_->process(mono.samples.data(), mono.frames(), pcm16k_);
-  if (pcm16k_.empty()) return;
 
   switch (state_) {
     case State::Idle: {
+      if (pcm16k_.empty()) break;
       const std::optional<float> score = wake_.process(pcm16k_.data(), pcm16k_.size());
       if (score.has_value()) {
         const float value = *score;
@@ -196,9 +195,16 @@ void Assistant::process_block(const audio::AudioFrame& mono) {
       break;
     }
     case State::Listening: {
-      utterance_.samples.insert(utterance_.samples.end(), mono.samples.begin(), mono.samples.end());
-      const std::vector<float> probs = vad_.process(pcm16k_.data(), pcm16k_.size());
-      for (float p : probs) endpointer_.push(p);
+      // Keep every captured sample. The resampler buffers internally and may
+      // emit nothing for a small input block, but that audio still belongs to
+      // the utterance - skipping it made the utterance far shorter than the
+      // audio VAD actually heard (e.g. 0.6 s of audio across a 3 s span).
+      utterance_.samples.insert(utterance_.samples.end(), mono.samples.begin(),
+                                mono.samples.end());
+      if (!pcm16k_.empty()) {
+        const std::vector<float> probs = vad_.process(pcm16k_.data(), pcm16k_.size());
+        for (float p : probs) endpointer_.push(p);
+      }
       break;
     }
     case State::Thinking:
@@ -398,12 +404,14 @@ int Assistant::run_file(const std::string& wav_path) {
   spdlog::info("replaying '{}' ({} Hz, {:.2f} s) through the state machine", wav_path,
                capture_rate_, mono.duration_seconds());
 
-  for (std::size_t offset = 0; offset < mono.samples.size(); offset += kBlockFrames) {
+  const std::size_t block_frames =
+      static_cast<std::size_t>(std::max(1, options_.file_block_frames));
+  for (std::size_t offset = 0; offset < mono.samples.size(); offset += block_frames) {
     if (stopping_.load(std::memory_order_relaxed) ||
         g_interrupted.load(std::memory_order_relaxed)) {
       break;
     }
-    const std::size_t count = std::min(kBlockFrames, mono.samples.size() - offset);
+    const std::size_t count = std::min(block_frames, mono.samples.size() - offset);
     audio::AudioFrame block;
     block.sample_rate = capture_rate_;
     block.channels = 1;

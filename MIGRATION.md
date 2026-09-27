@@ -114,6 +114,14 @@ Decisions assumed (confirmed):
   is honored. `assistant.listen_timeout_s` is config too, and the utterance log
   now shows the wall-clock start -> end. `tests/listen_test.sh` adds a pause
   fixture (wake + 1 s gap + command) and asserts a single ~2.3 s turn.
+- **Step 9 (done, utterance drop fix):** `process_block` returned early when the
+  resampler emitted no output for a small input block, *before* appending to
+  `utterance_`. The resampler buffers internally, so those samples still reached
+  VAD later - VAD saw the full span while the utterance kept only a fraction
+  (observed: 0.6 s of audio across a 3.3 s turn). `utterance_` now accumulates
+  from every `Listening` block regardless of resampler output. `run_file()` takes
+  a configurable block size and `tests/listen_test.sh` runs the pause fixture
+  with 1-frame blocks to force the condition - PASSING.
 
 ---
 

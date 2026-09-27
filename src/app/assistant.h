@@ -33,6 +33,7 @@ struct AssistantOptions {
   double listen_timeout_seconds = 8.0;  // max silence after wake before giving up
   // Ignore end-of-speech until the utterance reaches this duration (0 = off).
   double min_utterance_seconds = 1.5;
+  int file_block_frames = 1024;  // run_file() block size (debug/testing)
 };
 
 // The voice state machine:
