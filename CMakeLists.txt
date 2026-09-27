@@ -18,6 +18,8 @@ add_executable(hoodie
   src/main.cpp
   src/app/config.cpp
   src/app/api_commands.cpp
+  src/app/assistant.cpp
+  src/app/playback.cpp
   src/util/logging.cpp
   src/audio/capture.cpp
   src/audio/devices.cpp

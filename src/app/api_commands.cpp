@@ -2,10 +2,8 @@
 
 #include <spdlog/spdlog.h>
 
-#include <filesystem>
 #include <iostream>
 #include <string>
-#include <system_error>
 #include <vector>
 
 #include "agent/agent.h"
@@ -13,42 +11,15 @@
 #include "agent/tools.h"
 #include "api/clients.h"
 #include "api/openai_types.h"
-#include "audio/player.h"
+#include "app/playback.h"
 #include "audio/wav.h"
 #include "net/http.h"
-#include "util/process.h"
 
 namespace hoodie::app {
 namespace {
 
-namespace fs = std::filesystem;
-
 constexpr const char* kDefaultSystemPrompt =
     "You are a helpful assistant. Reply in one short sentence.";
-
-void play_frame(const audio::AudioFrame& frame, const std::string& device) {
-  audio::AudioPlayer::Options player_options;
-  player_options.device = device;
-  player_options.sample_rate = 0;  // device default
-  player_options.channels = 1;
-
-  audio::AudioPlayer player(player_options);
-  player.start();
-  player.enqueue(frame);
-  const bool drained = player.wait_drained();
-  player.stop();
-  if (!drained) spdlog::warn("playback did not drain within timeout");
-}
-
-void play_or_write(const audio::AudioFrame& frame, const ApiCommandOptions& options) {
-  if (!options.out_file.empty()) {
-    audio::write_audio_file(options.out_file, frame);
-    spdlog::info("wrote {} ({:.2f} s, {} Hz, {} ch)", options.out_file, frame.duration_seconds(),
-                 frame.sample_rate, frame.channels);
-    return;
-  }
-  play_frame(frame, options.output_device);
-}
 
 struct ApiContext {
   net::HttpClient http;
@@ -66,32 +37,6 @@ std::string chat_once(ApiContext& ctx, const ApiCommandOptions& options, const s
 
   const api::ChatResult result = ctx.clients.llm->chat(request);
   return result.message.content;
-}
-
-void play_music_request(const agent::MusicRequest& music, const ApiCommandOptions& options) {
-  if (music.id.empty()) return;
-
-  std::error_code error;
-  const fs::path directory = fs::temp_directory_path(error) / "hoodie_music";
-  fs::create_directories(directory, error);
-  const fs::path base = directory / "out";
-
-  const util::ProcessResult result = util::run_process(
-      {"yt-dlp", "--force-overwrite", "-f", "ba", "-x", "--audio-format", "vorbis", "-o",
-       base.string(), music.id});
-  if (result.exit_code != 0) {
-    spdlog::warn("music: download failed (exit {}): {}", result.exit_code, result.output);
-    return;
-  }
-
-  fs::path ogg = base;
-  ogg += ".ogg";
-  if (!fs::exists(ogg, error)) {
-    spdlog::warn("music: expected {} but it was not produced", ogg.string());
-    return;
-  }
-  spdlog::info("music: playing '{}' from {}", music.title, ogg.string());
-  play_frame(audio::read_audio_file(ogg.string()), options.output_device);
 }
 
 }  // namespace
@@ -125,10 +70,10 @@ int run_agent(const Config& config, const ApiCommandOptions& options, const std:
   spdlog::info("agent: completed in {} step(s)", result.steps);
 
   const audio::AudioFrame speech = ctx.clients.tts->synthesize(agent::normalize_for_tts(result.text));
-  play_or_write(speech, options);
+  play_or_write(speech, options.out_file, options.output_device);
 
   if (tool_context.music.has_value()) {
-    play_music_request(*tool_context.music, options);
+    play_music_request(*tool_context.music, options.out_file, options.output_device);
   }
   return 0;
 }
@@ -136,7 +81,7 @@ int run_agent(const Config& config, const ApiCommandOptions& options, const std:
 int run_say(const Config& config, const ApiCommandOptions& options, const std::string& text) {
   ApiContext ctx(config);
   const audio::AudioFrame audio = ctx.clients.tts->synthesize(agent::normalize_for_tts(text));
-  play_or_write(audio, options);
+  play_or_write(audio, options.out_file, options.output_device);
   return 0;
 }
 
@@ -160,10 +105,10 @@ int run_roundtrip(const Config& config, const ApiCommandOptions& options,
   std::cout << result.text << "\n";
 
   const audio::AudioFrame speech = ctx.clients.tts->synthesize(agent::normalize_for_tts(result.text));
-  play_or_write(speech, options);
+  play_or_write(speech, options.out_file, options.output_device);
 
   if (tool_context.music.has_value()) {
-    play_music_request(*tool_context.music, options);
+    play_music_request(*tool_context.music, options.out_file, options.output_device);
   }
   return 0;
 }

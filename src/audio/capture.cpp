@@ -53,18 +53,38 @@ void AudioCapture::start(Callback callback) {
   }
   sample_rate_ = options_.sample_rate;
 
+  auto is_supported = [&](int channels) {
+    PaStreamParameters params{};
+    params.device = *device;
+    params.channelCount = channels;
+    params.sampleFormat = paInt16;
+    params.suggestedLatency = info->defaultLowInputLatency;
+    params.hostApiSpecificStreamInfo = nullptr;
+    return Pa_IsFormatSupported(&params, nullptr, sample_rate_) == paFormatIsSupported;
+  };
+
+  // Some codecs (e.g. I2S + ES8388) only offer stereo capture. Requesting mono
+  // would fail Pa_IsFormatSupported, so fall back to the device's channel count
+  // and let the consumer downmix.
+  if (!is_supported(channels_)) {
+    const int fallback = info->maxInputChannels;
+    if (fallback > 0 && fallback != channels_ && is_supported(fallback)) {
+      spdlog::warn("capture: '{}' does not support {} ch; using {} ch (will mix to mono)",
+                   device_name_, channels_, fallback);
+      channels_ = fallback;
+    } else {
+      throw std::runtime_error("capture: device '" + device_name_ + "' does not support " +
+                               std::to_string(sample_rate_) + " Hz / " +
+                               std::to_string(channels_) + " ch");
+    }
+  }
+
   PaStreamParameters input_params{};
   input_params.device = *device;
   input_params.channelCount = channels_;
   input_params.sampleFormat = paInt16;
   input_params.suggestedLatency = info->defaultLowInputLatency;
   input_params.hostApiSpecificStreamInfo = nullptr;
-
-  if (Pa_IsFormatSupported(&input_params, nullptr, sample_rate_) != paFormatIsSupported) {
-    throw std::runtime_error("capture: device '" + device_name_ + "' does not support " +
-                             std::to_string(sample_rate_) + " Hz / " +
-                             std::to_string(channels_) + " ch");
-  }
 
   PaStream* stream = nullptr;
   const PaError err =

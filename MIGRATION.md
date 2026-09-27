@@ -77,6 +77,19 @@ Decisions assumed (confirmed):
   `search` hits DuckDuckGo's Instant Answer API (currently bot-blocked from this
   network, returns a clear no-results string).
 
+- **Step 6 (orchestrator, done):** the voice state machine.
+  `src/app/assistant.{h,cpp}` (`Idle → Listening → Thinking → Speaking`): live
+  PortAudio capture into a lock-free ring, wake word → Silero VAD → endpointer
+  to segment a single utterance, then buffered ASR → agent → TTS → playback.
+  Playback helpers were factored into `src/app/playback.{h,cpp}` (now shared by
+  `--roundtrip`). CLI: `--listen` (live mic, Ctrl-C to stop, `--once` for one
+  turn) and `--listen-wav <file>` (replay a WAV through the same state machine,
+  no mic). Capture falls back to the device channel count and downmixes when the
+  requested mono format is unsupported (stereo-only codecs). Barge-in/AEC are
+  still deferred (mic is not consumed while Thinking/Speaking).
+  `tests/listen_test.sh` drives wake → ASR → agent → TTS against the mock server
+  with no hardware — PASSING.
+
 ---
 
 ## 1. Current system (baseline to preserve or improve)

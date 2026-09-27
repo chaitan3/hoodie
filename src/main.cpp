@@ -12,6 +12,7 @@
 #include <thread>
 
 #include "app/api_commands.h"
+#include "app/assistant.h"
 #include "api/api_error.h"
 #include "agent/text_normalize.h"
 #include "app/config.h"
@@ -51,6 +52,9 @@ struct CliOptions {
   std::string tool_name;
   std::string tool_args;
   bool onnx_probe = false;
+  bool listen = false;
+  bool listen_once = false;
+  std::string listen_wav;
   float threshold_override = 0.0f;
 };
 
@@ -82,6 +86,11 @@ void print_usage(const char* argv0) {
       << "      --play <file>        Play an audio file, then exit\n"
       << "      --input-device <d>   Input device (name, index, or 'default')\n"
       << "      --output-device <d>  Output device (name, index, or 'default')\n\n"
+      << "Assistant:\n"
+      << "      --listen             Run the voice loop (wake -> ASR -> agent -> TTS)\n"
+      << "      --listen-wav <file>  Replay a WAV through the voice loop (no mic)\n"
+      << "      --once               Handle a single turn, then exit\n"
+      << "      --out <file>         Write the reply audio to a WAV instead of playing\n\n"
       << "Server round trips:\n"
       << "      --transcribe <file>  Transcribe an audio file, print the text\n"
       << "      --ask <text>         Send a prompt to the LLM, print the reply\n"
@@ -197,6 +206,12 @@ bool parse_args(int argc, char** argv, CliOptions& options, std::string& error) 
       if (!need_value(i, arg, options.endpoint_file)) return false;
     } else if (arg == "--onnx-probe") {
       options.onnx_probe = true;
+    } else if (arg == "--listen") {
+      options.listen = true;
+    } else if (arg == "--once") {
+      options.listen_once = true;
+    } else if (arg == "--listen-wav") {
+      if (!need_value(i, arg, options.listen_wav)) return false;
     } else if (arg == "--threshold") {
       std::string value;
       if (!need_value(i, arg, value)) return false;
@@ -409,7 +424,8 @@ int main(int argc, char** argv) {
     }
 
     if (options.play_file.empty() && options.record_file.empty() &&
-        !has_api_commands(options) && !has_wake_commands(options)) {
+        !has_api_commands(options) && !has_wake_commands(options) && !options.listen &&
+        options.listen_wav.empty()) {
       const hoodie::Config config = load_config(options.config_path);
       spdlog::info("hoodie {} ready", kVersion);
       spdlog::info("loaded configuration from {}", options.config_path);
@@ -418,6 +434,22 @@ int main(int argc, char** argv) {
     }
 
     const hoodie::Config config = load_config(options.config_path);
+
+    if (options.listen || !options.listen_wav.empty()) {
+      hoodie::app::AssistantOptions assistant_options;
+      assistant_options.input_device =
+          options.input_device.empty() ? config.audio.input_device : options.input_device;
+      assistant_options.output_device =
+          options.output_device.empty() ? config.audio.output_device : options.output_device;
+      assistant_options.system_prompt = options.system_prompt;
+      assistant_options.out_file = options.out_file;
+      assistant_options.once = options.listen_once;
+      hoodie::app::Assistant assistant(config, std::move(assistant_options));
+      if (!options.listen_wav.empty()) {
+        return assistant.run_file(options.listen_wav);
+      }
+      return assistant.run();
+    }
 
     if (has_wake_commands(options)) {
       if (options.onnx_probe) {
