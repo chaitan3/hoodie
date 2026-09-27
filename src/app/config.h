@@ -39,6 +39,7 @@ struct WakeWordConfig {
   std::string keyword_model = "models/alexa_v0.1.onnx";
   std::string vad_model = "models/silero_vad.onnx";
   int warmup_frames = 5;
+  bool require_real_context = true;
 };
 
 struct AudioConfig {

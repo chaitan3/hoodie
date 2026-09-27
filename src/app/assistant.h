@@ -27,6 +27,7 @@ struct AssistantOptions {
   std::string output_device;   // empty = config.audio.output_device
   std::string system_prompt;
   std::string out_file;        // when set, write the reply audio here instead of playing
+  std::string dump_utterance_dir;  // when set, save each utterance WAV sent to ASR
   bool once = false;           // handle a single turn, then return
   double idle_timeout_seconds = 0.0;    // 0 = wait forever for the wake word
   double listen_timeout_seconds = 8.0;  // max silence after wake before giving up
@@ -70,6 +71,7 @@ class Assistant {
   void enter_listening();
   void reset_turn();
   void respond();
+  void dump_utterance();
   void set_state(State state);
   const char* state_name() const;
 
@@ -97,6 +99,8 @@ class Assistant {
 
   State state_ = State::Idle;
   bool utterance_ready_ = false;
+  bool wake_high_ = false;  // rising-edge guard so a stale context does not re-trigger
+  int utterance_counter_ = 0;
   std::chrono::steady_clock::time_point listening_since_{};
 
   util::CancelToken cancel_;

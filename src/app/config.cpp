@@ -114,6 +114,8 @@ Config Config::load(const std::string& path) {
   cfg.wakeword.keyword_model = get_string(wake, "keyword_model", cfg.wakeword.keyword_model);
   cfg.wakeword.vad_model = get_string(wake, "vad_model", cfg.wakeword.vad_model);
   cfg.wakeword.warmup_frames = get_int(wake, "warmup_frames", cfg.wakeword.warmup_frames);
+  cfg.wakeword.require_real_context =
+      get_bool(wake, "require_real_context", cfg.wakeword.require_real_context);
 
   cfg.audio.input_device = get_string(audio, "input_device", cfg.audio.input_device);
   cfg.audio.output_device = get_string(audio, "output_device", cfg.audio.output_device);
@@ -169,7 +171,8 @@ std::string Config::summary() const {
       << "  capabilities.asr_stream    = " << (capabilities.asr_stream ? "true" : "false") << "\n"
       << "  capabilities.asr_realtime  = " << (capabilities.asr_realtime ? "true" : "false") << "\n"
       << "  wakeword.keyword     = " << wakeword.keyword
-      << "  (threshold=" << wakeword.threshold << ")\n"
+      << "  (threshold=" << wakeword.threshold
+      << ", gate=" << (wakeword.require_real_context ? "on" : "off") << ")\n"
       << "  audio.input_device   = " << (audio.input_device.empty() ? "<default>" : audio.input_device)
       << "\n"
       << "  audio.output_device  = "

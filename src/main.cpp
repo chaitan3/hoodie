@@ -55,6 +55,7 @@ struct CliOptions {
   bool listen = false;
   bool listen_once = false;
   std::string listen_wav;
+  std::string save_utterances_dir;
   float threshold_override = 0.0f;
 };
 
@@ -90,6 +91,7 @@ void print_usage(const char* argv0) {
       << "      --listen             Run the voice loop (wake -> ASR -> agent -> TTS)\n"
       << "      --listen-wav <file>  Replay a WAV through the voice loop (no mic)\n"
       << "      --once               Handle a single turn, then exit\n"
+      << "      --save-utterances <d>  Save each utterance WAV sent to ASR in dir <d>\n"
       << "      --out <file>         Write the reply audio to a WAV instead of playing\n\n"
       << "Server round trips:\n"
       << "      --transcribe <file>  Transcribe an audio file, print the text\n"
@@ -212,6 +214,8 @@ bool parse_args(int argc, char** argv, CliOptions& options, std::string& error) 
       options.listen_once = true;
     } else if (arg == "--listen-wav") {
       if (!need_value(i, arg, options.listen_wav)) return false;
+    } else if (arg == "--save-utterances") {
+      if (!need_value(i, arg, options.save_utterances_dir)) return false;
     } else if (arg == "--threshold") {
       std::string value;
       if (!need_value(i, arg, value)) return false;
@@ -443,6 +447,7 @@ int main(int argc, char** argv) {
           options.output_device.empty() ? config.audio.output_device : options.output_device;
       assistant_options.system_prompt = options.system_prompt;
       assistant_options.out_file = options.out_file;
+      assistant_options.dump_utterance_dir = options.save_utterances_dir;
       assistant_options.once = options.listen_once;
       hoodie::app::Assistant assistant(config, std::move(assistant_options));
       if (!options.listen_wav.empty()) {

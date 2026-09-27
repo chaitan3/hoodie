@@ -18,6 +18,10 @@ struct WakeWordConfig {
   std::string keyword = "alexa";
   float threshold = 0.5f;
   int warmup_frames = 5;  // predictions forced to zero for the first N 80 ms frames
+  // Withhold scores until the mel/embedding/keyword windows contain only real
+  // audio. Startup windows are seeded with synthetic padding, which can score a
+  // false positive on the first ungated frame; this gates those out (~2.4 s).
+  bool require_real_context = true;
 };
 
 // openWakeWord streaming detector: melspectrogram -> speech embedding -> keyword.
@@ -65,9 +69,15 @@ class WakeWordDetector {
   std::vector<int16_t> pending_;  // must stay contiguous for chunk extraction
   long frame_count_ = 0;
 
+  // Real (model-computed) frames seen since reset, used to gate scoring until
+  // the sliding windows are no longer mostly synthetic padding.
+  std::size_t real_mel_frames_ = 0;
+  std::size_t real_feature_frames_ = 0;
+
   std::string keyword_;
   float threshold_ = 0.5f;
   int warmup_frames_ = 5;
+  bool require_real_context_ = true;
 };
 
 }  // namespace hoodie::wake

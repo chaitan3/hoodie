@@ -89,6 +89,21 @@ Decisions assumed (confirmed):
   still deferred (mic is not consumed while Thinking/Speaking).
   `tests/listen_test.sh` drives wake → ASR → agent → TTS against the mock server
   with no hardware — PASSING.
+- **Step 7 (done, wake-word startup gate):** the detector now withholds scores
+  until its mel/embedding/keyword windows contain only real audio
+  (`wakeword.require_real_context`, default true). Root cause of the false wake:
+  `reset()` seeds those windows with synthetic padding, and the first score
+  after `warmup_frames` (~0.4 s) could reach ~0.98 on real room tone — a false
+  positive that the digital-silence tests never exercised. Gate holds ~2.4 s
+  once at startup (76 mel frames + 16 embedding frames). The orchestrator no
+  longer resets the detector per reply (that re-armed the gate and the false
+  positive); it clears the capture ring instead, so audio buffered during
+  ASR/TTS — including our own playback — is never fed to the detector. Set
+  `wakeword.require_real_context: false` to restore the old behaviour.
+  `tests/wake_test.sh` now uses a realistic lead-in stream (the 0.6 s clip is
+  too short to score under the gate), adds a room-tone-noise negative that
+  reproduces `max≈0.98 @ 0.48 s` with the gate off, and asserts the toggle —
+  PASSING.
 
 ---
 

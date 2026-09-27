@@ -22,9 +22,9 @@ pass() { echo "ok: $*"; }
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"; [[ -n "${MOCK_PID:-}" ]] && kill "$MOCK_PID" 2>/dev/null || true' EXIT
 
-# Fixture: wake word, short gap, a "command" (the clip again), trailing silence.
-# The gap stays under the endpointer's 600 ms silence threshold so the turn is
-# not cut short before the command.
+# Fixture: 3 s lead-in (so the real-context gate is open), the wake word, a
+# short gap, a "command" (the clip again), then trailing silence. The gap stays
+# under the endpointer's 600 ms silence threshold so the turn is not cut short.
 python3 - "$DATA/alexa_test.wav" "$WORK" <<'PY'
 import sys, wave
 
@@ -38,11 +38,11 @@ def silence(seconds):
 
 with wave.open(f"{out_dir}/listen.wav", "wb") as w:
     w.setnchannels(ch); w.setsampwidth(sw); w.setframerate(fr)
-    w.writeframes(frames + silence(0.3) + frames + silence(1.5))
+    w.writeframes(silence(3.0) + frames + silence(0.3) + frames + silence(1.5))
 
 with wave.open(f"{out_dir}/silence.wav", "wb") as w:
     w.setnchannels(ch); w.setsampwidth(sw); w.setframerate(fr)
-    w.writeframes(silence(3.0))
+    w.writeframes(silence(4.0))
 PY
 
 python3 "$ROOT/tests/mock_openai_server.py" --port "$PORT" >"$WORK/mock.log" 2>&1 &

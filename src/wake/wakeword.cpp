@@ -13,7 +13,8 @@ WakeWordDetector::WakeWordDetector(const WakeWordConfig& config)
       keyword_model_(config.keyword_model, 1),
       keyword_(config.keyword),
       threshold_(config.threshold),
-      warmup_frames_(config.warmup_frames) {
+      warmup_frames_(config.warmup_frames),
+      require_real_context_(config.require_real_context) {
   const std::vector<int64_t> keyword_input = keyword_model_.input_shape(0);
   const std::vector<int64_t> keyword_output = keyword_model_.output_shape(0);
   if (keyword_input.size() >= 2 && keyword_input[1] > 0) {
@@ -33,6 +34,8 @@ void WakeWordDetector::reset() {
   features_.assign(static_cast<std::size_t>(feature_input_frames_) * kFeatureDim, 0.0f);
   feature_frames_ = static_cast<std::size_t>(feature_input_frames_);
   frame_count_ = 0;
+  real_mel_frames_ = 0;
+  real_feature_frames_ = 0;
 }
 
 std::optional<float> WakeWordDetector::process(const int16_t* samples, std::size_t frames) {
@@ -93,6 +96,7 @@ float WakeWordDetector::process_chunk(const int16_t* chunk) {
     melspec_.resize(base + total);
     for (std::size_t i = 0; i < total; ++i) melspec_[base + i] = data[i] / 10.0f + 2.0f;
     mel_frames_ += frames;
+    real_mel_frames_ += frames;
   }
 
   if (mel_frames_ > kMaxMelFrames) {
@@ -101,8 +105,11 @@ float WakeWordDetector::process_chunk(const int16_t* chunk) {
     mel_frames_ = kMaxMelFrames;
   }
 
-  // 3. Embedding from the last 76 mel frames -> 96-dim feature frame.
-  if (mel_frames_ >= kEmbeddingWindow) {
+  // 3. Embedding from the last 76 mel frames -> 96-dim feature frame. Under the
+  // real-context gate, skip until the window is entirely real audio.
+  const bool mel_ready = mel_frames_ >= kEmbeddingWindow &&
+                         (!require_real_context_ || real_mel_frames_ >= kEmbeddingWindow);
+  if (mel_ready) {
     const std::size_t start = (mel_frames_ - kEmbeddingWindow) * mel_bins_;
     std::vector<float> window_data(
         melspec_.begin() + static_cast<std::ptrdiff_t>(start),
@@ -121,6 +128,7 @@ float WakeWordDetector::process_chunk(const int16_t* chunk) {
     const float* data = outputs[0].GetTensorData<float>();
     features_.insert(features_.end(), data, data + count);
     feature_frames_ += count / kFeatureDim;
+    real_feature_frames_ += count / kFeatureDim;
   }
 
   if (feature_frames_ > kMaxFeatureFrames) {
@@ -132,7 +140,11 @@ float WakeWordDetector::process_chunk(const int16_t* chunk) {
 
   // 4. Keyword model on the last feature_input_frames_ embeddings.
   float score = 0.0f;
-  if (feature_frames_ >= static_cast<std::size_t>(feature_input_frames_)) {
+  const bool features_ready =
+      feature_frames_ >= static_cast<std::size_t>(feature_input_frames_) &&
+      (!require_real_context_ ||
+       real_feature_frames_ >= static_cast<std::size_t>(feature_input_frames_));
+  if (features_ready) {
     const std::size_t start =
         (feature_frames_ - static_cast<std::size_t>(feature_input_frames_)) * kFeatureDim;
     std::vector<float> window_data(features_.begin() + static_cast<std::ptrdiff_t>(start),

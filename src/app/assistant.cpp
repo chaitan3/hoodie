@@ -4,7 +4,11 @@
 
 #include <algorithm>
 #include <csignal>
+#include <cstdio>
 #include <exception>
+#include <filesystem>
+#include <fstream>
+#include <system_error>
 #include <thread>
 #include <utility>
 
@@ -35,6 +39,7 @@ wake::WakeWordConfig make_wake_config(const Config& config) {
   wc.keyword = config.wakeword.keyword;
   wc.threshold = static_cast<float>(config.wakeword.threshold);
   wc.warmup_frames = config.wakeword.warmup_frames;
+  wc.require_real_context = config.wakeword.require_real_context;
   return wc;
 }
 
@@ -108,7 +113,11 @@ void Assistant::reset_turn() {
   utterance_ = audio::AudioFrame{};
   utterance_.sample_rate = capture_rate_;
   utterance_.channels = 1;
-  wake_.reset();
+  // Drop audio captured while we were busy (ASR/agent/TTS, including our own
+  // playback) so it is never fed back into the wake detector. The detector is
+  // deliberately NOT reset: re-seeding its windows would re-arm the startup
+  // gate - and its false positive - after every reply.
+  ring_.clear();
   vad_.reset();
   endpointer_.reset();
   set_state(State::Idle);
@@ -142,9 +151,20 @@ void Assistant::process_block(const audio::AudioFrame& mono) {
   switch (state_) {
     case State::Idle: {
       const std::optional<float> score = wake_.process(pcm16k_.data(), pcm16k_.size());
-      if (score.has_value() && *score >= wake_.threshold()) {
-        spdlog::info("wake word '{}' detected (score {:.2f})", wake_.keyword(), *score);
-        enter_listening();
+      if (score.has_value()) {
+        const float value = *score;
+        const float threshold = wake_.threshold();
+        // Trigger on a rising edge only. Because the detector is not reset
+        // between turns, its windows still hold the wake word for ~1 s after a
+        // reply and would otherwise re-fire immediately; re-arm once the score
+        // has fallen well below the threshold.
+        if (!wake_high_ && value >= threshold) {
+          wake_high_ = true;
+          spdlog::info("wake word '{}' detected (score {:.2f})", wake_.keyword(), value);
+          enter_listening();
+        } else if (wake_high_ && value < threshold * 0.5f) {
+          wake_high_ = false;
+        }
       }
       break;
     }
@@ -160,9 +180,37 @@ void Assistant::process_block(const audio::AudioFrame& mono) {
   }
 }
 
+void Assistant::dump_utterance() {
+  if (options_.dump_utterance_dir.empty()) return;
+
+  std::error_code error;
+  std::filesystem::create_directories(options_.dump_utterance_dir, error);
+  if (error) {
+    spdlog::warn("cannot create '{}': {}", options_.dump_utterance_dir, error.message());
+    return;
+  }
+
+  char name[32];
+  std::snprintf(name, sizeof(name), "utterance-%04d.wav", ++utterance_counter_);
+  const std::filesystem::path path =
+      std::filesystem::path(options_.dump_utterance_dir) / name;
+
+  // Write exactly the bytes that will be POSTed to the ASR service.
+  const std::vector<uint8_t> wav = audio::encode_wav_pcm16(utterance_);
+  std::ofstream out(path, std::ios::binary);
+  if (!out) {
+    spdlog::warn("cannot write '{}'", path.string());
+    return;
+  }
+  out.write(reinterpret_cast<const char*>(wav.data()), static_cast<std::streamsize>(wav.size()));
+  spdlog::info("saved utterance -> {} ({} Hz, {} ch, {:.2f} s)", path.string(),
+               utterance_.sample_rate, utterance_.channels, utterance_.duration_seconds());
+}
+
 void Assistant::respond() {
   set_state(State::Thinking);
   spdlog::info("utterance: {:.2f} s", utterance_.duration_seconds());
+  dump_utterance();
 
   std::string transcript;
   try {

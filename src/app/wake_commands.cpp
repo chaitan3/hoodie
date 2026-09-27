@@ -43,6 +43,7 @@ int run_wakeword_check(const Config& config, const std::string& audio_file,
   detector_config.threshold = threshold_override > 0 ? threshold_override
                                                      : static_cast<float>(config.wakeword.threshold);
   detector_config.warmup_frames = config.wakeword.warmup_frames;
+  detector_config.require_real_context = config.wakeword.require_real_context;
 
   wake::WakeWordDetector detector(detector_config);
 

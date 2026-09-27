@@ -23,7 +23,8 @@
     "embedding_model": "models/embedding_model.onnx",
     "keyword_model": "models/alexa_v0.1.onnx",
     "vad_model": "models/silero_vad.onnx",
-    "warmup_frames": 5
+    "warmup_frames": 5,
+    "require_real_context": true
   },
   "audio": {
     "input_device": "",
