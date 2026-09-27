@@ -9,3 +9,5 @@ regex
 resampy
 inflect
 pydantic_ai
+setuptools<81
+ddgs

@@ -20,13 +20,13 @@ input_channels = 1
 output_sample_rate = 44100
 
 # raspi
-#input_device_id = 3
-#output_device_id = 5
-#blocksize = 0
-#input_sample_rate = 48000
-#input_channels = 1
-##output_sample_rate = 44100
-#output_sample_rate = 48000
+input_device_id = 2
+output_device_id = 1
+blocksize = 0
+input_sample_rate = 48000
+input_channels = 1
+#output_sample_rate = 44100
+output_sample_rate = 48000
 #
 class AudioRecorder(object):
     def __init__(self):
