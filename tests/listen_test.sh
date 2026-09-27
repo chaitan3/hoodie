@@ -38,7 +38,7 @@ def silence(seconds):
 
 with wave.open(f"{out_dir}/listen.wav", "wb") as w:
     w.setnchannels(ch); w.setsampwidth(sw); w.setframerate(fr)
-    w.writeframes(silence(3.0) + frames + silence(0.3) + frames + silence(1.5))
+    w.writeframes(silence(3.0) + frames + silence(0.3) + frames + frames + silence(1.5))
 
 with wave.open(f"{out_dir}/silence.wav", "wb") as w:
     w.setnchannels(ch); w.setsampwidth(sw); w.setframerate(fr)

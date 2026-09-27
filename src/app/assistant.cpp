@@ -108,12 +108,15 @@ void Assistant::set_state(State state) {
 void Assistant::on_endpoint(wake::Endpointer::Event event, std::size_t /*frame_index*/) {
   if (event != wake::Endpointer::Event::SpeechEnd) return;
   // The wake-word tail trips SpeechStart, so a short pause right after the wake
-  // ends the utterance before the user's command. Ignore end-of-speech until
-  // the utterance holds at least min_utterance_seconds of audio; the endpointer
-  // resets, and a later command produces a fresh SpeechStart/SpeechEnd we honor.
-  const double seconds = utterance_.duration_seconds();
-  if (seconds < options_.min_utterance_seconds) {
-    spdlog::debug("ignoring end at {:.2f}s (< min {:.2f}s)", seconds,
+  // ends the utterance before the command. Ignore end-of-speech until the
+  // "time since wake" reaches min_utterance_seconds. Use the larger of the
+  // accumulated audio and wall-clock: replaying a file runs far faster than
+  // real time, while a live capture stream can deliver less audio than
+  // wall-clock (idle/pacing), which would otherwise never reach the threshold.
+  const double since_wake =
+      std::max(utterance_.duration_seconds(), elapsed_seconds(listening_since_));
+  if (since_wake < options_.min_utterance_seconds) {
+    spdlog::debug("ignoring end at {:.2f}s (< min {:.2f}s)", since_wake,
                   options_.min_utterance_seconds);
     return;
   }
@@ -346,8 +349,17 @@ int Assistant::run() {
     if (got == 0) {
       if (state_ == State::Listening && !endpointer_.in_speech() &&
           elapsed_seconds(listening_since_) > options_.listen_timeout_seconds) {
-        spdlog::info("no speech after wake; returning to wake word");
-        reset_turn();
+        if (utterance_.duration_seconds() >= 0.3) {
+          // Safety net: the endpointer never produced an end we could honor, but
+          // we did capture speech - process what we have rather than discarding.
+          spdlog::warn("no end within {:.1f}s; processing {:.2f}s captured so far",
+                       options_.listen_timeout_seconds, utterance_.duration_seconds());
+          respond();
+          if (options_.once) break;
+        } else {
+          spdlog::info("no speech after wake; returning to wake word");
+          reset_turn();
+        }
       }
       if (options_.idle_timeout_seconds > 0.0 && state_ == State::Idle &&
           elapsed_seconds(started) > options_.idle_timeout_seconds) {
