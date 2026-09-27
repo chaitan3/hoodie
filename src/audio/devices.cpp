@@ -54,6 +54,8 @@ std::vector<DeviceInfo> list_devices() {
     DeviceInfo device;
     device.index = i;
     device.name = info->name != nullptr ? info->name : "<unnamed>";
+    const PaHostApiInfo* host = Pa_GetHostApiInfo(info->hostApi);
+    device.host_api = (host != nullptr && host->name != nullptr) ? host->name : "?";
     device.max_input_channels = info->maxInputChannels;
     device.max_output_channels = info->maxOutputChannels;
     device.default_sample_rate = info->defaultSampleRate;
@@ -65,18 +67,42 @@ std::vector<DeviceInfo> list_devices() {
 }
 
 void print_devices(std::ostream& os) {
+  ensure_portaudio_initialized();
+
+  // Host APIs that this PortAudio build actually compiled in (before any device
+  // filtering). If a sound server is in use, expect one named "pulse"/"pipewire"
+  // or an ALSA PCM whose name is "pulse"/"piped" below.
+  os << "host APIs:";
+  const PaHostApiIndex host_count = Pa_GetHostApiCount();
+  for (PaHostApiIndex h = 0; h < host_count; ++h) {
+    const PaHostApiInfo* host = Pa_GetHostApiInfo(h);
+    if (host != nullptr && host->name != nullptr) os << " " << host->name;
+  }
+  os << "\n";
+
   const std::vector<DeviceInfo> devices = list_devices();
   if (devices.empty()) {
     os << "no audio devices found\n";
     return;
   }
   for (const DeviceInfo& d : devices) {
+    // Flag devices that reach a sound server (PulseAudio/PipeWire), either as a
+    // native host API or via the ALSA pulse/pipewire plugin.
+    const std::string lower_name = to_lower(d.name);
+    const std::string lower_host = to_lower(d.host_api);
+    const bool server_routed =
+        lower_host.find("pulse") != std::string::npos ||
+        lower_name.find("pulse") != std::string::npos ||
+        lower_name.find("pipewire") != std::string::npos;
+
     std::string role;
     if (d.is_default_input) role += " default-in";
     if (d.is_default_output) role += " default-out";
+    if (server_routed) role += " [pulse/pipewire]";
     os << "[" << d.index << "] " << d.name << "\n"
        << "      in=" << d.max_input_channels << " out=" << d.max_output_channels
-       << " default_rate=" << static_cast<int>(d.default_sample_rate) << role << "\n";
+       << " default_rate=" << static_cast<int>(d.default_sample_rate)
+       << " host=" << d.host_api << role << "\n";
   }
 }
 

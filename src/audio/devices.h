@@ -10,6 +10,7 @@ namespace hoodie::audio {
 struct DeviceInfo {
   int index = -1;
   std::string name;
+  std::string host_api;  // PortAudio host API name, e.g. "ALSA", "JACK", "pulse"
   int max_input_channels = 0;
   int max_output_channels = 0;
   double default_sample_rate = 0.0;
