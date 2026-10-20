@@ -21,6 +21,7 @@ add_executable(hoodie
   src/app/assistant.cpp
   src/app/playback.cpp
   src/app/responder.cpp
+  src/app/speculator.cpp
   src/util/logging.cpp
   src/audio/capture.cpp
   src/audio/devices.cpp

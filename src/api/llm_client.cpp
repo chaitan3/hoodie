@@ -36,6 +36,7 @@ nlohmann::json build_chat_body(const ChatRequest& request, const std::string& de
   if (!request.tools_json.empty()) {
     body["tools"] = nlohmann::json::parse(request.tools_json);
   }
+  if (request.speculative) body["hoodie_speculative"] = true;
   return body;
 }
 

@@ -55,6 +55,13 @@ struct AssistantConfig {
   // short pause ends the utterance before the command. 0 disables the gate.
   int min_utterance_ms = 1500;
   double listen_timeout_s = 8.0;  // max silence after wake before giving up
+
+  // Speculative LLM start on a stable ASR partial. Off by default; never
+  // executes tools or plays audio before the final transcript is confirmed.
+  bool speculate = false;
+  int speculate_stable_ms = 400;   // partial unchanged for this long
+  int speculate_silence_ms = 250;  // VAD silence before speculating
+  int speculate_min_words = 2;     // ignore very short partials
 };
 
 // Streaming servers (audio.cpp for ASR/TTS, llama.cpp for the LLM). Empty base

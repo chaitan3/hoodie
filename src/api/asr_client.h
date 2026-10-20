@@ -115,6 +115,7 @@ class LiveAsrClient : public AsrClient {
   bool final_delivered_ = false;
   std::exception_ptr error_;
   std::string stream_error_;
+  std::string partial_text_;  // cumulative partial transcript
 };
 
 // Live ASR with an automatic buffered fallback. Every pushed frame is retained

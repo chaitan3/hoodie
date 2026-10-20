@@ -127,6 +127,7 @@ void LiveAsrClient::start(const util::CancelToken& cancel,
     final_delivered_ = false;
     error_ = nullptr;
     stream_error_.clear();
+    partial_text_.clear();
   }
   worker_ = std::thread([this] { worker_loop(); });
 }
@@ -236,7 +237,10 @@ void LiveAsrClient::handle_event(const std::string& event_name, const std::strin
     } else if (payload.contains("text") && payload["text"].is_string()) {
       delta = payload["text"].get<std::string>();
     }
-    if (!delta.empty() && on_delta_) on_delta_(AsrDelta{delta, /*is_final=*/false});
+    if (!delta.empty()) {
+      partial_text_ += delta;
+      if (on_delta_) on_delta_(AsrDelta{partial_text_, /*is_final=*/false});
+    }
   } else if (type == "transcript.text.done") {
     std::string text;
     if (payload.contains("text") && payload["text"].is_string()) {

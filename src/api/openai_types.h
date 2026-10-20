@@ -28,6 +28,9 @@ struct ChatRequest {
   std::vector<Message> messages;
   std::string tools_json;  // optional raw JSON array of tool schemas
   bool stream = false;
+  // Diagnostic flag for the speculative path; OpenAI-compatible servers ignore
+  // unknown fields. Used by the mock to return a distinguishable reply.
+  bool speculative = false;
 };
 
 struct ChatResult {

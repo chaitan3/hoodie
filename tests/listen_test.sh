@@ -143,6 +143,51 @@ size=$(stat -c%s "$WORK/live_reply.wav")
 [[ "$size" -gt 10000 ]] || fail "live: reply audio too small: $size bytes"
 pass "live ASR pipeline (reply $size bytes)"
 
+# --- Speculative LLM on a stable partial -------------------------------------
+SPEC_CONFIG="$WORK/speculate.json"
+python3 - "$LIVE_CONFIG" "$SPEC_CONFIG" <<'PY'
+import json, sys
+src, dst = sys.argv[1], sys.argv[2]
+cfg = json.load(open(src))
+cfg["assistant"]["speculate"] = True
+cfg["assistant"]["speculate_stable_ms"] = 100
+cfg["assistant"]["speculate_silence_ms"] = 100
+cfg["assistant"]["speculate_min_words"] = 1
+json.dump(cfg, open(dst, "w"))
+PY
+
+if ! "$BIN" -c "$SPEC_CONFIG" --listen-wav "$WORK/listen_pause.wav" \
+    --out "$WORK/spec_reply.wav" >"$WORK/spec.log" 2>&1; then
+  fail "speculative pipeline failed: $(tail -1 "$WORK/spec.log")"
+fi
+grep -q "speculation: started" "$WORK/spec.log" || fail "speculation did not start"
+grep -q "speculation: used" "$WORK/spec.log" || fail "speculation was not used"
+grep -q "reply: mock speculative reply" "$WORK/spec.log" || fail "speculative reply missing"
+[[ -s "$WORK/spec_reply.wav" ]] || fail "speculation: no reply audio"
+size=$(stat -c%s "$WORK/spec_reply.wav")
+[[ "$size" -gt 10000 ]] || fail "speculation: reply audio too small: $size bytes"
+pass "speculative LLM used on a matched partial (reply $size bytes)"
+
+# --- A changed final transcript must discard the speculation -----------------
+MISMATCH_CONFIG="$WORK/mismatch.json"
+python3 - "$SPEC_CONFIG" "$MISMATCH_CONFIG" <<'PY'
+import json, sys
+src, dst = sys.argv[1], sys.argv[2]
+cfg = json.load(open(src))
+cfg["streaming"]["asr_live_path"] = "/v1/audio/transcriptions/live?mismatch=1"
+json.dump(cfg, open(dst, "w"))
+PY
+
+if ! "$BIN" -c "$MISMATCH_CONFIG" --listen-wav "$WORK/listen_pause.wav" \
+    --out "$WORK/mismatch_reply.wav" >"$WORK/mismatch.log" 2>&1; then
+  fail "mismatch pipeline failed: $(tail -1 "$WORK/mismatch.log")"
+fi
+grep -q "speculation: started" "$WORK/mismatch.log" || fail "mismatch: speculation did not start"
+grep -q "speculation: discarded" "$WORK/mismatch.log" || fail "mismatch: speculation not discarded"
+grep -q "reply: mock final reply" "$WORK/mismatch.log" || fail "mismatch: normal reply missing"
+[[ -s "$WORK/mismatch_reply.wav" ]] || fail "mismatch: no reply audio"
+pass "changed final transcript discards speculation"
+
 # --- Tiny input blocks must not drop utterance audio -------------------------
 # The resampler emits nothing for very small blocks; the utterance must keep
 # those samples anyway (regression: it kept only a fraction of the span).

@@ -33,7 +33,11 @@
   },
   "assistant": {
     "min_utterance_ms": 1500,
-    "listen_timeout_s": 8.0
+    "listen_timeout_s": 8.0,
+    "speculate": false,
+    "speculate_stable_ms": 400,
+    "speculate_silence_ms": 250,
+    "speculate_min_words": 2
   },
   "streaming": {
     "audio_base_url": "",

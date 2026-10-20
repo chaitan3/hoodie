@@ -19,6 +19,7 @@ SAMPLE_RATE = 24000
 TONE_SECONDS = 0.4
 REPLY_TEXT = "mock reply: pong"
 FINAL_TEXT = "mock final reply"
+SPECULATIVE_TEXT = "mock speculative reply"
 TRANSCRIPT_TEXT = "mock transcript"
 
 
@@ -83,6 +84,14 @@ class Handler(BaseHTTPRequestHandler):
         self._send_chunked("text/event-stream", payloads)
 
     def _send_llm_stream(self, request) -> None:
+        if request.get("hoodie_speculative"):
+            events = []
+            for i in range(0, len(SPECULATIVE_TEXT), 8):
+                events.append({"choices": [{"delta": {"content": SPECULATIVE_TEXT[i : i + 8]}}]})
+            events.append({"choices": [{"delta": {}, "finish_reason": "stop"}]})
+            self._send_sse(events)
+            return
+
         tools = request.get("tools") or []
         messages = request.get("messages") or []
         used_tool = any(m.get("role") == "tool" for m in messages)
@@ -132,6 +141,10 @@ class Handler(BaseHTTPRequestHandler):
                 return None
 
     def _live_asr(self) -> None:
+        mismatch = "mismatch=1" in self.path
+        partial_text = TRANSCRIPT_TEXT
+        final_text = "mock transcript final" if mismatch else TRANSCRIPT_TEXT
+
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-cache")
@@ -144,6 +157,7 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.flush()
 
         total = 0
+        partial_sent = False
         while True:
             size = self._read_chunk_size()
             if size is None:
@@ -157,11 +171,11 @@ class Handler(BaseHTTPRequestHandler):
             self.rfile.read(size)
             self.rfile.read(2)  # trailing CRLF
             total += size
-            if total >= 32000:  # ~1 s of 16 kHz s16le
-                sse({"type": "transcript.text.delta", "delta": "mock "})
-                total = 0
+            if not partial_sent and total >= 16000:  # ~0.5 s of 16 kHz s16le
+                sse({"type": "transcript.text.delta", "delta": partial_text})
+                partial_sent = True
 
-        sse({"type": "transcript.text.done", "text": TRANSCRIPT_TEXT})
+        sse({"type": "transcript.text.done", "text": final_text})
         self.wfile.write(b"0\r\n\r\n")
         self.wfile.flush()
 
@@ -186,6 +200,18 @@ class Handler(BaseHTTPRequestHandler):
             used_tool = any(m.get("role") == "tool" for m in messages)
             if request.get("stream"):
                 self._send_llm_stream(request)
+            elif request.get("hoodie_speculative"):
+                self._send_json(
+                    200,
+                    {
+                        "choices": [
+                            {
+                                "message": {"role": "assistant", "content": SPECULATIVE_TEXT},
+                                "finish_reason": "stop",
+                            }
+                        ]
+                    },
+                )
             elif tools and not used_tool:
                 # Scripted first round: ask the client to call get_time.
                 self._send_json(

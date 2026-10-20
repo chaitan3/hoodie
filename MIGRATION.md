@@ -144,6 +144,17 @@ Decisions assumed (confirmed):
   gains the chunked live-ingest endpoint; `integration.sh` covers live
   transcribe/roundtrip and the live -> buffered fallback, `listen_test.sh`
   covers the live pipeline - PASSING.
+- **Step 12 (phase 4, speculative LLM):** `src/app/speculator` runs one LLM
+  request on a stable ASR partial with the same system prompt/tools, buffering
+  content and noting tool calls but never executing tools or emitting audio.
+  The orchestrator triggers it on a stable partial (audio-time based, so it also
+  works for `--listen-wav`) plus VAD silence and a minimum word count. When the
+  final transcript arrives, a case/punctuation-insensitive match is required;
+  the buffered reply is used only if it completed with no tool calls, otherwise
+  it is discarded and the normal agent runs. `LiveAsrClient` now emits
+  cumulative partials. Config `assistant.speculate*` (off by default).
+  `listen_test.sh` covers the matched (speculation used) and changed-final
+  (discarded) paths - PASSING.
 
 ---
 

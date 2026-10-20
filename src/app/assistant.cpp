@@ -3,6 +3,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <csignal>
 #include <cstdio>
@@ -20,6 +21,7 @@
 #include "agent/tools.h"
 #include "app/playback.h"
 #include "app/responder.h"
+#include "app/speculator.h"
 #include "audio/wav.h"
 
 namespace hoodie::app {
@@ -59,6 +61,36 @@ std::string wall_clock(std::chrono::system_clock::time_point when) {
   return buffer;
 }
 
+std::size_t word_count(const std::string& text) {
+  std::size_t count = 0;
+  bool in_word = false;
+  for (unsigned char c : text) {
+    if (std::isspace(c)) {
+      in_word = false;
+    } else if (!in_word) {
+      in_word = true;
+      ++count;
+    }
+  }
+  return count;
+}
+
+// Compare ASR partial vs final without being derailed by case or punctuation.
+std::string normalize_transcript(const std::string& text) {
+  std::string out;
+  bool pending_space = false;
+  for (unsigned char c : text) {
+    if (std::isalnum(c)) {
+      if (pending_space && !out.empty()) out.push_back(' ');
+      pending_space = false;
+      out.push_back(static_cast<char>(std::tolower(c)));
+    } else if (std::isspace(c)) {
+      pending_space = true;
+    }
+  }
+  return out;
+}
+
 }  // namespace
 
 Assistant::Assistant(const Config& config, AssistantOptions options)
@@ -74,7 +106,10 @@ Assistant::Assistant(const Config& config, AssistantOptions options)
       ring_(1u << 16),
       scratch_(kScratchSamples) {}
 
-Assistant::~Assistant() { clients_.asr->stop(); }
+Assistant::~Assistant() {
+  stop_speculation();
+  clients_.asr->stop();
+}
 
 void Assistant::stop() {
   stopping_.store(true, std::memory_order_relaxed);
@@ -124,22 +159,29 @@ void Assistant::on_endpoint(wake::Endpointer::Event event, std::size_t /*frame_i
 }
 
 void Assistant::enter_listening() {
+  stop_speculation();
   utterance_ = audio::AudioFrame{};
   utterance_.sample_rate = capture_rate_;
   utterance_.channels = 1;
   utterance_ready_ = false;
-  asr_partial_.clear();
-  asr_final_.clear();
+  {
+    std::lock_guard<std::mutex> lock(asr_text_mutex_);
+    asr_partial_.clear();
+    asr_final_.clear();
+  }
+  partial_snapshot_.clear();
+  last_partial_audio_ = 0.0;
+  last_speech_audio_ = 0.0;
   vad_.reset();
   endpointer_.reset();
 
   try {
     clients_.asr->start(cancel_, [this](const api::AsrDelta& delta) {
+      std::lock_guard<std::mutex> lock(asr_text_mutex_);
       if (delta.is_final) {
         asr_final_ = delta.text;
       } else {
         asr_partial_ = delta.text;
-        spdlog::debug("asr partial: {}", asr_partial_);
       }
     });
   } catch (const std::exception& e) {
@@ -154,6 +196,7 @@ void Assistant::enter_listening() {
 }
 
 void Assistant::reset_turn() {
+  stop_speculation();
   clients_.asr->stop();
   utterance_ready_ = false;
   utterance_ = audio::AudioFrame{};
@@ -167,6 +210,41 @@ void Assistant::reset_turn() {
   vad_.reset();
   endpointer_.reset();
   set_state(State::Idle);
+}
+
+void Assistant::maybe_start_speculation(double now_audio) {
+  if (!options_.speculate || speculation_started_) return;
+  if (!clients_.asr->capabilities().partials) return;
+
+  std::string partial;
+  {
+    std::lock_guard<std::mutex> lock(asr_text_mutex_);
+    partial = asr_partial_;
+  }
+  if (partial != partial_snapshot_) {
+    partial_snapshot_ = partial;
+    last_partial_audio_ = now_audio;
+  }
+  if (partial.empty()) return;
+  if (word_count(partial) < static_cast<std::size_t>(options_.speculate_min_words)) return;
+  if (now_audio - last_partial_audio_ < options_.speculate_stable_ms / 1000.0) return;
+  if (now_audio - last_speech_audio_ < options_.speculate_silence_ms / 1000.0) return;
+
+  speculation_started_ = true;
+  speculated_transcript_ = partial;
+  speculator_ = std::make_unique<Speculator>(
+      *clients_.llm, agent::builtin_tools(http_, config_),
+      options_.system_prompt.empty() ? kDefaultSystemPrompt : options_.system_prompt);
+  speculator_->start(speculated_transcript_, cancel_);
+  spdlog::info("speculation: started on '{}'", speculated_transcript_);
+}
+
+void Assistant::stop_speculation() {
+  if (speculator_) {
+    speculator_->stop();
+    speculator_.reset();
+  }
+  speculation_started_ = false;
 }
 
 audio::AudioFrame Assistant::make_mono_block(std::size_t samples) {
@@ -233,7 +311,12 @@ void Assistant::process_block(const audio::AudioFrame& mono) {
         }
 
         const std::vector<float> probs = vad_.process(pcm16k_.data(), pcm16k_.size());
-        for (float p : probs) endpointer_.push(p);
+        const double now_audio = utterance_.duration_seconds();
+        for (float p : probs) {
+          if (p >= 0.5f) last_speech_audio_ = now_audio;
+          endpointer_.push(p);
+        }
+        maybe_start_speculation(now_audio);
       }
       break;
     }
@@ -295,7 +378,10 @@ void Assistant::respond() {
   try {
     const auto t0 = std::chrono::steady_clock::now();
     clients_.asr->commit();
-    transcript = asr_final_;
+    {
+      std::lock_guard<std::mutex> lock(asr_text_mutex_);
+      transcript = asr_final_;
+    }
     spdlog::info("asr: {} ({:.2f} s)", clients_.asr->description(), elapsed_seconds(t0));
   } catch (const std::exception& e) {
     spdlog::error("asr failed: {}", e.what());
@@ -310,6 +396,22 @@ void Assistant::respond() {
   }
   spdlog::info("transcript: {}", transcript);
 
+  // Confirm or discard a speculative LLM answer against the final transcript.
+  std::string speculative_reply;
+  bool use_speculation = false;
+  if (speculation_started_) {
+    const bool match =
+        speculator_ != nullptr &&
+        normalize_transcript(transcript) == normalize_transcript(speculated_transcript_);
+    if (match && speculator_->wait(std::chrono::milliseconds(5000)) &&
+        !speculator_->has_tools() && !speculator_->failed()) {
+      speculative_reply = speculator_->text();
+      use_speculation = !speculative_reply.empty();
+    }
+    spdlog::info("speculation: {} (match={})", use_speculation ? "used" : "discarded", match);
+  }
+  stop_speculation();
+
   agent::Agent agent(*clients_.llm, agent::builtin_tools(http_, config_),
                      agent::AgentOptions{
                          options_.system_prompt.empty() ? kDefaultSystemPrompt : options_.system_prompt,
@@ -320,16 +422,23 @@ void Assistant::respond() {
   Responder responder(*clients_.tts, options_.out_file, options_.output_device);
   responder.start(cancel_, [this] { set_state(State::Speaking); });
 
-  try {
-    const auto t0 = std::chrono::steady_clock::now();
-    result = agent.run(transcript, tool_context, cancel_,
-                       [&](const std::string& token) { responder.push_text(token); });
-    spdlog::info("agent: {} step(s) ({:.2f} s)", result.steps, elapsed_seconds(t0));
-  } catch (const std::exception& e) {
-    responder.abort();
-    spdlog::error("agent failed: {}", e.what());
-    reset_turn();
-    return;
+  if (use_speculation) {
+    result.text = speculative_reply;
+    result.steps = 1;
+    spdlog::info("agent: speculative reply (no tool steps)");
+    responder.push_text(speculative_reply);
+  } else {
+    try {
+      const auto t0 = std::chrono::steady_clock::now();
+      result = agent.run(transcript, tool_context, cancel_,
+                         [&](const std::string& token) { responder.push_text(token); });
+      spdlog::info("agent: {} step(s) ({:.2f} s)", result.steps, elapsed_seconds(t0));
+    } catch (const std::exception& e) {
+      responder.abort();
+      spdlog::error("agent failed: {}", e.what());
+      reset_turn();
+      return;
+    }
   }
 
   if (result.text.empty()) {

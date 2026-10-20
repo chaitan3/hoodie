@@ -129,6 +129,13 @@ Config Config::load(const std::string& path) {
       get_int(assistant, "min_utterance_ms", cfg.assistant.min_utterance_ms);
   cfg.assistant.listen_timeout_s =
       get_double(assistant, "listen_timeout_s", cfg.assistant.listen_timeout_s);
+  cfg.assistant.speculate = get_bool(assistant, "speculate", cfg.assistant.speculate);
+  cfg.assistant.speculate_stable_ms =
+      get_int(assistant, "speculate_stable_ms", cfg.assistant.speculate_stable_ms);
+  cfg.assistant.speculate_silence_ms =
+      get_int(assistant, "speculate_silence_ms", cfg.assistant.speculate_silence_ms);
+  cfg.assistant.speculate_min_words =
+      get_int(assistant, "speculate_min_words", cfg.assistant.speculate_min_words);
 
   cfg.streaming.audio_base_url =
       get_string(streaming, "audio_base_url", cfg.streaming.audio_base_url);
@@ -167,6 +174,10 @@ Config Config::load(const std::string& path) {
   }
   if (cfg.assistant.listen_timeout_s <= 0.0) {
     throw std::runtime_error("config: assistant.listen_timeout_s must be positive");
+  }
+  if (cfg.assistant.speculate_stable_ms < 0 || cfg.assistant.speculate_silence_ms < 0 ||
+      cfg.assistant.speculate_min_words < 0) {
+    throw std::runtime_error("config: assistant speculation values must not be negative");
   }
   const auto valid_mode = [](const std::string& mode, std::initializer_list<const char*> allowed,
                              const char* key) {
@@ -233,6 +244,10 @@ std::string Config::summary() const {
       << "  audio.capture_rate   = " << audio.capture_sample_rate << "\n"
       << "  assistant.min_utterance_ms = " << assistant.min_utterance_ms << "\n"
       << "  assistant.listen_timeout_s = " << assistant.listen_timeout_s << "\n"
+      << "  assistant.speculate = " << (assistant.speculate ? "on" : "off")
+      << "  (stable=" << assistant.speculate_stable_ms
+      << "ms, silence=" << assistant.speculate_silence_ms
+      << "ms, min_words=" << assistant.speculate_min_words << ")\n"
       << "  streaming.asr_mode   = " << streaming.asr_mode << "\n"
       << "  streaming.tts_mode   = " << streaming.tts_mode
       << "  (pcm " << streaming.tts_pcm_rate << " Hz, " << streaming.tts_pcm_channels << " ch)\n"

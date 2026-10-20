@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -22,6 +23,8 @@
 
 namespace hoodie::app {
 
+class Speculator;
+
 struct AssistantOptions {
   std::string input_device;    // empty = config.audio.input_device
   std::string output_device;   // empty = config.audio.output_device
@@ -33,6 +36,11 @@ struct AssistantOptions {
   double listen_timeout_seconds = 8.0;  // max silence after wake before giving up
   // Ignore end-of-speech until the utterance reaches this duration (0 = off).
   double min_utterance_seconds = 1.5;
+  // Speculative LLM start on a stable ASR partial.
+  bool speculate = false;
+  int speculate_stable_ms = 400;
+  int speculate_silence_ms = 250;
+  int speculate_min_words = 2;
   int file_block_frames = 1024;  // run_file() block size (debug/testing)
 };
 
@@ -75,6 +83,8 @@ class Assistant {
   void reset_turn();
   void respond();
   void dump_utterance();
+  void maybe_start_speculation(double now_audio);
+  void stop_speculation();
   void set_state(State state);
   const char* state_name() const;
 
@@ -99,8 +109,16 @@ class Assistant {
   audio::AudioFrame utterance_;  // mono, at the capture rate
   int capture_rate_ = 0;
   int capture_channels_ = 1;
+  mutable std::mutex asr_text_mutex_;
   std::string asr_partial_;
   std::string asr_final_;
+
+  std::unique_ptr<Speculator> speculator_;
+  bool speculation_started_ = false;
+  std::string speculated_transcript_;
+  double last_partial_audio_ = 0.0;
+  double last_speech_audio_ = 0.0;
+  std::string partial_snapshot_;
 
   std::atomic<State> state_{State::Idle};
   bool utterance_ready_ = false;

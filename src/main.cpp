@@ -475,6 +475,10 @@ int main(int argc, char** argv) {
                                        ? options.min_utterance_ms
                                        : config.assistant.min_utterance_ms;
       assistant_options.min_utterance_seconds = static_cast<double>(min_utterance_ms) / 1000.0;
+      assistant_options.speculate = config.assistant.speculate;
+      assistant_options.speculate_stable_ms = config.assistant.speculate_stable_ms;
+      assistant_options.speculate_silence_ms = config.assistant.speculate_silence_ms;
+      assistant_options.speculate_min_words = config.assistant.speculate_min_words;
       assistant_options.file_block_frames = options.wav_block_frames;
       hoodie::app::Assistant assistant(config, std::move(assistant_options));
       if (!options.listen_wav.empty()) {
