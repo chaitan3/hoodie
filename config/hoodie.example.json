@@ -1,20 +1,22 @@
 {
   "server": {
-    "base_url": "https://***REMOVED***/api",
+    "base_url": "https://MODEL_URL/api",
+    "audio_base_url": "",
+    "llm_base_url": "",
     "api_key": "",
-    "asr_path": "/v1/audio/transcriptions",
-    "tts_path": "/v1/audio/speech",
-    "llm_path": "/chat/completions",
+    "audio_api_key": "",
+    "llm_api_key": "",
     "asr_model": "small",
     "tts_model": "tts-1",
-    "llm_model": "qwen3.5-4b"
+    "llm_model": "qwen3.5-4b",
+    "tts_pcm_rate": 24000,
+    "tts_pcm_channels": 1,
+    "llm_cache_prompt": true
   },
-  "capabilities": {
-    "llm_stream": true,
-    "tts_stream": true,
-    "tts_format": "pcm",
-    "asr_stream": true,
-    "asr_realtime": false
+  "streaming": {
+    "asr_mode": "buffered",
+    "tts_mode": "buffered",
+    "llm_mode": "buffered"
   },
   "wakeword": {
     "keyword": "alexa",
@@ -38,15 +40,5 @@
     "speculate_stable_ms": 400,
     "speculate_silence_ms": 250,
     "speculate_min_words": 2
-  },
-  "streaming": {
-    "audio_base_url": "",
-    "llm_base_url": "",
-    "asr_mode": "buffered",
-    "tts_mode": "buffered",
-    "llm_mode": "buffered",
-    "tts_pcm_rate": 24000,
-    "tts_pcm_channels": 1,
-    "llm_cache_prompt": true
   }
 }

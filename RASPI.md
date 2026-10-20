@@ -252,10 +252,11 @@ WantedBy=multi-user.target
 ## 11. What is and isn't ready
 
 **Ready to test on the Pi:** audio capture/playback, WAV I/O, resampling,
-wake word, Silero VAD + endpointer, buffered ASR/TTS/LLM against your server,
-the tool-calling agent, and TTS text normalization.
+wake word, Silero VAD + endpointer, the `--listen` loop, buffered ASR/TTS/LLM,
+streaming SSE LLM + raw-PCM TTS, live ASR with buffered fallback, the
+tool-calling agent, TTS text normalization, and optional speculative LLM starts
+(`assistant.speculate`).
 
-**Not yet implemented:** the continuous listen state machine (`--listen`),
-streaming ASR/TTS/LLM (SSE / chunked PCM), and barge-in/AEC. Those are Phases
-5–7; the interfaces, capability flags, and buffered fallbacks are already in
-place, so they drop in without changing the pipeline.
+**Not yet implemented:** barge-in/AEC (Phase 6) and the optional Realtime /
+speech-to-speech adapter. The transport interfaces and buffered fallbacks are in
+place.

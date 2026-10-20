@@ -4,31 +4,32 @@
 
 namespace hoodie {
 
-// Remote OpenAI-compatible server. Note the current server uses inconsistent
-// paths: ASR/TTS are under /v1/... but the LLM endpoint is /chat/completions
-// with no /v1 prefix. Paths are therefore configured individually.
+// Hosts, keys and models for the remote services. Paths are derived from the
+// transport mode selected in StreamingConfig, so there is exactly one place to
+// configure each service's host/model/secret.
 struct ServerConfig {
-  std::string base_url;
-  std::string api_key;
+  std::string base_url;        // default host for every service
+  std::string audio_base_url;  // optional override for ASR + TTS
+  std::string llm_base_url;    // optional override for LLM
 
-  std::string asr_path = "/v1/audio/transcriptions";
-  std::string tts_path = "/v1/audio/speech";
-  std::string llm_path = "/chat/completions";
+  std::string api_key;       // default API key
+  std::string audio_api_key; // optional override for ASR + TTS
+  std::string llm_api_key;   // optional override for LLM
 
   std::string asr_model = "small";
   std::string tts_model = "tts-1";
   std::string llm_model = "qwen3.5-4b";
-};
 
-// Which transport each service uses. Streaming is the canonical interface; when
-// a flag is false the corresponding buffered adapter is selected. Selected once
-// at startup, never switched mid-request (see MIGRATION.md §6.1).
-struct Capabilities {
-  bool llm_stream = true;
-  bool tts_stream = true;
-  std::string tts_format = "pcm";  // requested when tts_stream is true
-  bool asr_stream = true;          // SSE file-based transcription
-  bool asr_realtime = false;       // future optional tier
+  int tts_pcm_rate = 24000;    // raw streamed PCM has no header
+  int tts_pcm_channels = 1;
+  bool llm_cache_prompt = true;  // llama.cpp cache_prompt extension
+
+  std::string audio_base() const {
+    return audio_base_url.empty() ? base_url : audio_base_url;
+  }
+  std::string llm_base() const { return llm_base_url.empty() ? base_url : llm_base_url; }
+  std::string audio_key() const { return audio_api_key.empty() ? api_key : audio_api_key; }
+  std::string llm_key() const { return llm_api_key.empty() ? api_key : llm_api_key; }
 };
 
 struct WakeWordConfig {
@@ -64,51 +65,29 @@ struct AssistantConfig {
   int speculate_min_words = 2;     // ignore very short partials
 };
 
-// Streaming servers (audio.cpp for ASR/TTS, llama.cpp for the LLM). Empty base
-// URLs fall back to server.base_url. Modes default to buffered so an existing
-// config keeps its current behavior.
+// Transport per service. Selected once at startup; never switched mid-request.
 struct StreamingConfig {
-  std::string audio_base_url;  // audio.cpp (live/SSE ASR, streaming TTS)
-  std::string llm_base_url;    // llama.cpp
-
-  std::string asr_model;  // empty -> server.asr_model
-  std::string tts_model;  // empty -> server.tts_model
-
-  std::string asr_live_path = "/v1/audio/transcriptions/live";
-  std::string asr_sse_path = "/v1/audio/transcriptions";
-  std::string tts_path = "/v1/audio/speech";
-  std::string llm_path = "/v1/chat/completions";
-
-  int tts_pcm_rate = 24000;
-  int tts_pcm_channels = 1;
-
   std::string asr_mode = "buffered";  // buffered | live
   std::string tts_mode = "buffered";  // buffered | stream
   std::string llm_mode = "buffered";  // buffered | stream
-
-  bool llm_cache_prompt = true;  // llama.cpp cache_prompt extension
 };
 
 struct Config {
   ServerConfig server;
-  Capabilities capabilities;
+  StreamingConfig streaming;
   WakeWordConfig wakeword;
   AudioConfig audio;
   AssistantConfig assistant;
-  StreamingConfig streaming;
 
   // Load and validate configuration. Throws std::runtime_error on failure.
-  // Applies HOODIE_API_KEY / HOODIE_BASE_URL environment overrides.
+  // Applies HOODIE_* environment overrides.
   static Config load(const std::string& path);
 
   // Like load(), but returns defaulted config when the file does not exist.
   // Still throws on malformed contents. Intended for diagnostic commands.
   static Config load_or_default(const std::string& path);
 
-  // base_url + path, joining with exactly one slash.
-  std::string resolve_url(const std::string& path) const;
-
-  // Human-readable dump with the API key redacted.
+  // Human-readable dump with API keys redacted.
   std::string summary() const;
 };
 

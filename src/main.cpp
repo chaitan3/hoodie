@@ -115,8 +115,12 @@ void print_usage(const char* argv0) {
       << "Environment:\n"
       << "  HOODIE_CONFIG     Config file path\n"
       << "  HOODIE_LOG_LEVEL  trace|debug|info|warn|error|critical|off\n"
-      << "  HOODIE_API_KEY    Overrides server.api_key\n"
-      << "  HOODIE_BASE_URL   Overrides server.base_url\n";
+      << "  HOODIE_BASE_URL   Overrides server.base_url\n"
+      << "  HOODIE_AUDIO_BASE_URL  Overrides server.audio_base_url\n"
+      << "  HOODIE_LLM_BASE_URL    Overrides server.llm_base_url\n"
+      << "  HOODIE_API_KEY         Overrides server.api_key\n"
+      << "  HOODIE_AUDIO_API_KEY   Overrides server.audio_api_key\n"
+      << "  HOODIE_LLM_API_KEY     Overrides server.llm_api_key\n";
 }
 
 std::string default_config_path() {

@@ -15,9 +15,10 @@ pass() { echo "ok: $*"; }
 
 [[ -x "$BIN" ]] || fail "binary not found: $BIN (build first)"
 
+FALLBACK_PID=""
 python3 "$ROOT/tests/mock_openai_server.py" --port "$PORT" >/tmp/hoodie_mock.log 2>&1 &
 MOCK_PID=$!
-trap 'kill "$MOCK_PID" 2>/dev/null || true' EXIT
+trap 'kill "$MOCK_PID" 2>/dev/null || true; if [[ -n "${FALLBACK_PID:-}" ]]; then kill "$FALLBACK_PID" 2>/dev/null || true; fi' EXIT
 
 for _ in $(seq 1 50); do
   if curl -sf "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then break; fi
@@ -56,20 +57,15 @@ pass "--roundtrip"
 
 # --- Streaming tiers (SSE LLM + raw-PCM TTS) --------------------------------
 STREAM_CONFIG="$(mktemp --suffix=.json)"
-python3 - "$CONFIG" "$STREAM_CONFIG" "$PORT" <<'PY'
+python3 - "$CONFIG" "$STREAM_CONFIG" <<'PY'
 import json, sys
-src, dst, port = sys.argv[1], sys.argv[2], sys.argv[3]
+src, dst = sys.argv[1], sys.argv[2]
 with open(src) as f:
     cfg = json.load(f)
 cfg["streaming"] = {
-    "audio_base_url": f"http://127.0.0.1:{port}",
-    "llm_base_url": f"http://127.0.0.1:{port}",
     "asr_mode": "buffered",
     "tts_mode": "stream",
     "llm_mode": "stream",
-    "tts_pcm_rate": 24000,
-    "tts_pcm_channels": 1,
-    "llm_cache_prompt": True,
 }
 with open(dst, "w") as f:
     json.dump(cfg, f)
@@ -93,20 +89,15 @@ rm -f "$STREAM_CONFIG"
 
 # --- Live ASR (chunked PCM up, SSE down) ------------------------------------
 LIVE_CONFIG="$(mktemp --suffix=.json)"
-python3 - "$CONFIG" "$LIVE_CONFIG" "$PORT" <<'PY'
+python3 - "$CONFIG" "$LIVE_CONFIG" <<'PY'
 import json, sys
-src, dst, port = sys.argv[1], sys.argv[2], sys.argv[3]
+src, dst = sys.argv[1], sys.argv[2]
 with open(src) as f:
     cfg = json.load(f)
 cfg["streaming"] = {
-    "audio_base_url": f"http://127.0.0.1:{port}",
-    "llm_base_url": f"http://127.0.0.1:{port}",
     "asr_mode": "live",
     "tts_mode": "stream",
     "llm_mode": "stream",
-    "tts_pcm_rate": 24000,
-    "tts_pcm_channels": 1,
-    "llm_cache_prompt": True,
 }
 with open(dst, "w") as f:
     json.dump(cfg, f)
@@ -125,16 +116,13 @@ rm -f "$LIVE_CONFIG"
 # --- Live ASR falls back to the buffered endpoint on failure ----------------
 FALLBACK_CONFIG="$(mktemp --suffix=.json)"
 FALLBACK_LOG="$(mktemp)"
-python3 - "$CONFIG" "$FALLBACK_CONFIG" "$PORT" <<'PY'
+python3 - "$CONFIG" "$FALLBACK_CONFIG" <<'PY'
 import json, sys
-src, dst, port = sys.argv[1], sys.argv[2], sys.argv[3]
+src, dst = sys.argv[1], sys.argv[2]
 with open(src) as f:
     cfg = json.load(f)
 cfg["streaming"] = {
-    "audio_base_url": f"http://127.0.0.1:{port}",
-    "llm_base_url": f"http://127.0.0.1:{port}",
     "asr_mode": "live",
-    "asr_live_path": "/v1/broken/asr",
     "tts_mode": "buffered",
     "llm_mode": "buffered",
 }
@@ -142,12 +130,27 @@ with open(dst, "w") as f:
     json.dump(cfg, f)
 PY
 
+# A second mock whose live endpoint always fails; the buffered endpoint still
+# works, so the ASR fallback replay can succeed on the same host.
+FALLBACK_PORT=$((PORT + 1))
+python3 "$ROOT/tests/mock_openai_server.py" --port "$FALLBACK_PORT" --fail-live \
+  >/tmp/hoodie_mock_fallback.log 2>&1 &
+FALLBACK_PID=$!
+for _ in $(seq 1 50); do
+  curl -sf "http://127.0.0.1:$FALLBACK_PORT/health" >/dev/null 2>&1 && break
+  sleep 0.1
+done
+curl -sf "http://127.0.0.1:$FALLBACK_PORT/health" >/dev/null || fail "fallback mock did not start"
+
 out_file="$FALLBACK_LOG"
-"$BIN" -c "$FALLBACK_CONFIG" --transcribe "$ROOT/beep.ogg" >"$out_file" 2>&1 ||
+HOODIE_BASE_URL="http://127.0.0.1:$FALLBACK_PORT" \
+  "$BIN" -c "$FALLBACK_CONFIG" --transcribe "$ROOT/beep.ogg" >"$out_file" 2>&1 ||
   fail "fallback asr run failed"
 grep -q "mock transcript" "$out_file" || fail "fallback asr missing transcript"
 grep -q "buffered fallback" "$out_file" || fail "live ASR did not report fallback"
 pass "--transcribe (live -> buffered fallback)"
+kill "$FALLBACK_PID" 2>/dev/null || true
+FALLBACK_PID=""
 rm -f "$FALLBACK_CONFIG" "$FALLBACK_LOG"
 
 # --- Error handling ----------------------------------------------------------

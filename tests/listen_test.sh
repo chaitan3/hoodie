@@ -61,23 +61,16 @@ done
 curl -sf "http://127.0.0.1:$PORT/health" >/dev/null || fail "mock server did not start"
 
 STREAM_CONFIG="$WORK/streaming.json"
-python3 - "$CONFIG" "$STREAM_CONFIG" "$PORT" <<'PY'
+python3 - "$CONFIG" "$STREAM_CONFIG" <<'PY'
 import json, sys
-src, dst, port = sys.argv[1], sys.argv[2], sys.argv[3]
-with open(src) as f:
-    cfg = json.load(f)
+src, dst = sys.argv[1], sys.argv[2]
+cfg = json.load(open(src))
 cfg["streaming"] = {
-    "audio_base_url": f"http://127.0.0.1:{port}",
-    "llm_base_url": f"http://127.0.0.1:{port}",
     "asr_mode": "buffered",
     "tts_mode": "stream",
     "llm_mode": "stream",
-    "tts_pcm_rate": 24000,
-    "tts_pcm_channels": 1,
-    "llm_cache_prompt": True,
 }
-with open(dst, "w") as f:
-    json.dump(cfg, f)
+json.dump(cfg, open(dst, "w"))
 PY
 
 export HOODIE_BASE_URL="http://127.0.0.1:$PORT"
@@ -174,7 +167,7 @@ python3 - "$SPEC_CONFIG" "$MISMATCH_CONFIG" <<'PY'
 import json, sys
 src, dst = sys.argv[1], sys.argv[2]
 cfg = json.load(open(src))
-cfg["streaming"]["asr_live_path"] = "/v1/audio/transcriptions/live?mismatch=1"
+cfg["server"]["asr_model"] = "small-mismatch"
 json.dump(cfg, open(dst, "w"))
 PY
 

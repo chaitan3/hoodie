@@ -61,6 +61,15 @@ void apply_env_override(const char* name, std::string& target) {
   }
 }
 
+void apply_env_overrides(Config& cfg) {
+  apply_env_override("HOODIE_BASE_URL", cfg.server.base_url);
+  apply_env_override("HOODIE_AUDIO_BASE_URL", cfg.server.audio_base_url);
+  apply_env_override("HOODIE_LLM_BASE_URL", cfg.server.llm_base_url);
+  apply_env_override("HOODIE_API_KEY", cfg.server.api_key);
+  apply_env_override("HOODIE_AUDIO_API_KEY", cfg.server.audio_api_key);
+  apply_env_override("HOODIE_LLM_API_KEY", cfg.server.llm_api_key);
+}
+
 std::string redact(const std::string& key) {
   if (key.empty()) return "<unset>";
   if (key.size() <= 6) return "***";
@@ -87,26 +96,24 @@ Config Config::load(const std::string& path) {
 
   Config cfg;
   const json& server = sub(root, "server");
-  const json& caps = sub(root, "capabilities");
   const json& wake = sub(root, "wakeword");
   const json& audio = sub(root, "audio");
   const json& assistant = sub(root, "assistant");
   const json& streaming = sub(root, "streaming");
 
   cfg.server.base_url = get_string(server, "base_url", cfg.server.base_url);
+  cfg.server.audio_base_url = get_string(server, "audio_base_url", cfg.server.audio_base_url);
+  cfg.server.llm_base_url = get_string(server, "llm_base_url", cfg.server.llm_base_url);
   cfg.server.api_key = get_string(server, "api_key", cfg.server.api_key);
-  cfg.server.asr_path = get_string(server, "asr_path", cfg.server.asr_path);
-  cfg.server.tts_path = get_string(server, "tts_path", cfg.server.tts_path);
-  cfg.server.llm_path = get_string(server, "llm_path", cfg.server.llm_path);
+  cfg.server.audio_api_key = get_string(server, "audio_api_key", cfg.server.audio_api_key);
+  cfg.server.llm_api_key = get_string(server, "llm_api_key", cfg.server.llm_api_key);
   cfg.server.asr_model = get_string(server, "asr_model", cfg.server.asr_model);
   cfg.server.tts_model = get_string(server, "tts_model", cfg.server.tts_model);
   cfg.server.llm_model = get_string(server, "llm_model", cfg.server.llm_model);
-
-  cfg.capabilities.llm_stream = get_bool(caps, "llm_stream", cfg.capabilities.llm_stream);
-  cfg.capabilities.tts_stream = get_bool(caps, "tts_stream", cfg.capabilities.tts_stream);
-  cfg.capabilities.tts_format = get_string(caps, "tts_format", cfg.capabilities.tts_format);
-  cfg.capabilities.asr_stream = get_bool(caps, "asr_stream", cfg.capabilities.asr_stream);
-  cfg.capabilities.asr_realtime = get_bool(caps, "asr_realtime", cfg.capabilities.asr_realtime);
+  cfg.server.tts_pcm_rate = get_int(server, "tts_pcm_rate", cfg.server.tts_pcm_rate);
+  cfg.server.tts_pcm_channels = get_int(server, "tts_pcm_channels", cfg.server.tts_pcm_channels);
+  cfg.server.llm_cache_prompt =
+      get_bool(server, "llm_cache_prompt", cfg.server.llm_cache_prompt);
 
   cfg.wakeword.keyword = get_string(wake, "keyword", cfg.wakeword.keyword);
   cfg.wakeword.threshold = get_double(wake, "threshold", cfg.wakeword.threshold);
@@ -137,37 +144,26 @@ Config Config::load(const std::string& path) {
   cfg.assistant.speculate_min_words =
       get_int(assistant, "speculate_min_words", cfg.assistant.speculate_min_words);
 
-  cfg.streaming.audio_base_url =
-      get_string(streaming, "audio_base_url", cfg.streaming.audio_base_url);
-  cfg.streaming.llm_base_url =
-      get_string(streaming, "llm_base_url", cfg.streaming.llm_base_url);
-  cfg.streaming.asr_model = get_string(streaming, "asr_model", cfg.streaming.asr_model);
-  cfg.streaming.tts_model = get_string(streaming, "tts_model", cfg.streaming.tts_model);
-  cfg.streaming.asr_live_path =
-      get_string(streaming, "asr_live_path", cfg.streaming.asr_live_path);
-  cfg.streaming.asr_sse_path =
-      get_string(streaming, "asr_sse_path", cfg.streaming.asr_sse_path);
-  cfg.streaming.tts_path = get_string(streaming, "tts_path", cfg.streaming.tts_path);
-  cfg.streaming.llm_path = get_string(streaming, "llm_path", cfg.streaming.llm_path);
-  cfg.streaming.tts_pcm_rate =
-      get_int(streaming, "tts_pcm_rate", cfg.streaming.tts_pcm_rate);
-  cfg.streaming.tts_pcm_channels =
-      get_int(streaming, "tts_pcm_channels", cfg.streaming.tts_pcm_channels);
   cfg.streaming.asr_mode = get_string(streaming, "asr_mode", cfg.streaming.asr_mode);
   cfg.streaming.tts_mode = get_string(streaming, "tts_mode", cfg.streaming.tts_mode);
   cfg.streaming.llm_mode = get_string(streaming, "llm_mode", cfg.streaming.llm_mode);
-  cfg.streaming.llm_cache_prompt =
-      get_bool(streaming, "llm_cache_prompt", cfg.streaming.llm_cache_prompt);
 
-  // Environment overrides win over the file, so secrets can stay out of it.
-  apply_env_override("HOODIE_API_KEY", cfg.server.api_key);
-  apply_env_override("HOODIE_BASE_URL", cfg.server.base_url);
+  apply_env_overrides(cfg);
 
-  if (cfg.server.base_url.empty()) {
-    throw std::runtime_error("config: server.base_url must not be empty");
+  // Every service must resolve to a host: base_url is the default, with the
+  // per-service overrides taking precedence.
+  if (cfg.server.audio_base().empty()) {
+    throw std::runtime_error(
+        "config: server.base_url or server.audio_base_url must not be empty");
+  }
+  if (cfg.server.llm_base().empty()) {
+    throw std::runtime_error("config: server.base_url or server.llm_base_url must not be empty");
   }
   if (cfg.audio.capture_sample_rate <= 0) {
     throw std::runtime_error("config: audio.capture_sample_rate must be positive");
+  }
+  if (cfg.server.tts_pcm_rate <= 0 || cfg.server.tts_pcm_channels <= 0) {
+    throw std::runtime_error("config: server.tts_pcm_rate/channels must be positive");
   }
   if (cfg.assistant.min_utterance_ms < 0) {
     throw std::runtime_error("config: assistant.min_utterance_ms must not be negative");
@@ -189,9 +185,6 @@ Config Config::load(const std::string& path) {
   valid_mode(cfg.streaming.asr_mode, {"buffered", "live"}, "streaming.asr_mode");
   valid_mode(cfg.streaming.tts_mode, {"buffered", "stream"}, "streaming.tts_mode");
   valid_mode(cfg.streaming.llm_mode, {"buffered", "stream"}, "streaming.llm_mode");
-  if (cfg.streaming.tts_pcm_rate <= 0 || cfg.streaming.tts_pcm_channels <= 0) {
-    throw std::runtime_error("config: streaming.tts_pcm_rate/channels must be positive");
-  }
   return cfg;
 }
 
@@ -199,8 +192,7 @@ Config Config::load_or_default(const std::string& path) {
   std::ifstream probe(path);
   if (!probe) {
     Config cfg;
-    apply_env_override("HOODIE_API_KEY", cfg.server.api_key);
-    apply_env_override("HOODIE_BASE_URL", cfg.server.base_url);
+    apply_env_overrides(cfg);
     return cfg;
   }
   probe.close();
@@ -217,46 +209,43 @@ std::string join_url(const std::string& base_url, const std::string& path) {
   return base_url + path;
 }
 
-std::string Config::resolve_url(const std::string& path) const {
-  return join_url(server.base_url, path);
-}
-
 std::string Config::summary() const {
   std::ostringstream out;
   out << "config:\n"
-      << "  server.base_url      = " << server.base_url << "\n"
-      << "  server.api_key       = " << redact(server.api_key) << "\n"
-      << "  server.asr_path      = " << server.asr_path << "  (model=" << server.asr_model << ")\n"
-      << "  server.tts_path      = " << server.tts_path << "  (model=" << server.tts_model << ")\n"
-      << "  server.llm_path      = " << server.llm_path << "  (model=" << server.llm_model << ")\n"
-      << "  capabilities.llm_stream    = " << (capabilities.llm_stream ? "true" : "false") << "\n"
-      << "  capabilities.tts_stream    = " << (capabilities.tts_stream ? "true" : "false")
-      << "  (format=" << capabilities.tts_format << ")\n"
-      << "  capabilities.asr_stream    = " << (capabilities.asr_stream ? "true" : "false") << "\n"
-      << "  capabilities.asr_realtime  = " << (capabilities.asr_realtime ? "true" : "false") << "\n"
-      << "  wakeword.keyword     = " << wakeword.keyword
+      << "  server.base_url       = " << (server.base_url.empty() ? "<unset>" : server.base_url)
+      << "\n"
+      << "  server.audio_base_url = "
+      << (server.audio_base_url.empty() ? "<base_url>" : server.audio_base_url) << "\n"
+      << "  server.llm_base_url   = "
+      << (server.llm_base_url.empty() ? "<base_url>" : server.llm_base_url) << "\n"
+      << "  server.api_key        = " << redact(server.api_key) << "\n"
+      << "  server.audio_api_key  = "
+      << (server.audio_api_key.empty() ? "<api_key>" : redact(server.audio_api_key)) << "\n"
+      << "  server.llm_api_key    = "
+      << (server.llm_api_key.empty() ? "<api_key>" : redact(server.llm_api_key)) << "\n"
+      << "  server.asr_model      = " << server.asr_model << "\n"
+      << "  server.tts_model      = " << server.tts_model << "\n"
+      << "  server.llm_model      = " << server.llm_model << "\n"
+      << "  server.tts_pcm        = " << server.tts_pcm_rate << " Hz, "
+      << server.tts_pcm_channels << " ch\n"
+      << "  server.llm_cache_prompt = " << (server.llm_cache_prompt ? "true" : "false") << "\n"
+      << "  streaming.asr_mode    = " << streaming.asr_mode << "\n"
+      << "  streaming.tts_mode    = " << streaming.tts_mode << "\n"
+      << "  streaming.llm_mode    = " << streaming.llm_mode << "\n"
+      << "  wakeword.keyword      = " << wakeword.keyword
       << "  (threshold=" << wakeword.threshold
       << ", gate=" << (wakeword.require_real_context ? "on" : "off") << ")\n"
-      << "  audio.input_device   = " << (audio.input_device.empty() ? "<default>" : audio.input_device)
-      << "\n"
-      << "  audio.output_device  = "
+      << "  audio.input_device    = "
+      << (audio.input_device.empty() ? "<default>" : audio.input_device) << "\n"
+      << "  audio.output_device   = "
       << (audio.output_device.empty() ? "<default>" : audio.output_device) << "\n"
-      << "  audio.capture_rate   = " << audio.capture_sample_rate << "\n"
+      << "  audio.capture_rate    = " << audio.capture_sample_rate << "\n"
       << "  assistant.min_utterance_ms = " << assistant.min_utterance_ms << "\n"
       << "  assistant.listen_timeout_s = " << assistant.listen_timeout_s << "\n"
-      << "  assistant.speculate = " << (assistant.speculate ? "on" : "off")
+      << "  assistant.speculate   = " << (assistant.speculate ? "on" : "off")
       << "  (stable=" << assistant.speculate_stable_ms
       << "ms, silence=" << assistant.speculate_silence_ms
-      << "ms, min_words=" << assistant.speculate_min_words << ")\n"
-      << "  streaming.asr_mode   = " << streaming.asr_mode << "\n"
-      << "  streaming.tts_mode   = " << streaming.tts_mode
-      << "  (pcm " << streaming.tts_pcm_rate << " Hz, " << streaming.tts_pcm_channels << " ch)\n"
-      << "  streaming.llm_mode   = " << streaming.llm_mode << "\n"
-      << "  streaming.audio_url  = "
-      << (streaming.audio_base_url.empty() ? "<server.base_url>" : streaming.audio_base_url)
-      << "\n"
-      << "  streaming.llm_url    = "
-      << (streaming.llm_base_url.empty() ? "<server.base_url>" : streaming.llm_base_url) << "\n";
+      << "ms, min_words=" << assistant.speculate_min_words << ")\n";
   return out.str();
 }
 

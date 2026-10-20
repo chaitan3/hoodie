@@ -129,8 +129,8 @@ Decisions assumed (confirmed):
   raw PCM chunks); `src/agent/sentence_splitter` (sentence/clause/word-cap
   flush policy); `src/app/responder` (LLM tokens -> splitter -> one ordered TTS
   worker -> player or `--out` file; the player starts on the first chunk).
-  New `streaming` config block (audio/llm base URLs, models, modes, TTS PCM
-  rate, `llm_cache_prompt`); defaults stay buffered. Mock server gains SSE chat
+  New `streaming` config block (modes only; hosts/models live under `server`);
+  defaults stay buffered. Mock server gains SSE chat
   and chunked raw-PCM speech. `integration.sh` covers SSE LLM/streaming TTS and
   `listen_test.sh` covers the full streaming pipeline - PASSING.
 - **Step 11 (phase 3, live ASR):** `HttpClient::post_duplex` (chunked request
@@ -155,6 +155,18 @@ Decisions assumed (confirmed):
   cumulative partials. Config `assistant.speculate*` (off by default).
   `listen_test.sh` covers the matched (speculation used) and changed-final
   (discarded) paths - PASSING.
+- **Step 13 (config simplification):** service hosts, keys and models now live
+  under `server` (`base_url`, optional `audio_base_url`/`llm_base_url` and
+  `audio_api_key`/`llm_api_key` overrides). `streaming` holds only
+  `asr_mode`/`tts_mode`/`llm_mode`. Endpoint paths are derived from the mode
+  (`/v1/audio/transcriptions[/live]`, `/v1/audio/speech`,
+  `/v1/chat/completions`), so there are no `*_path` fields and no `capabilities`
+  block. The buffered fallback uses the same host as the streaming tier
+  (audio.cpp/llama.cpp serve both transports). `server.llm_model` is shared by
+  both LLM tiers; audio.cpp model ids must match
+  `server.asr_model`/`server.tts_model`. Environment overrides added for the
+  per-service base URLs and keys (`HOODIE_AUDIO_*`, `HOODIE_LLM_*`). Example
+  config and tests updated - PASSING.
 
 ---
 
@@ -289,7 +301,7 @@ src/
     llm_client.{h,cpp}      interface + SseLlm, BufferedLlm
     tts_client.{h,cpp}      interface + StreamPcmTts, BufferedTts
     openai_types.{h,cpp}
-    capabilities.{h,cpp}    startup probe / fallback
+    clients.{h,cpp}         tier selection + buffered fallback
   agent/
     agent.{h,cpp}           tool-call loop
     tool_registry.{h,cpp}
@@ -390,9 +402,8 @@ session/WS lifecycle, and it still lets partial text appear before the final
 transcript. It does **not** reduce "wait for utterance end + upload" latency — that
 is the accepted trade-off. Realtime WS remains a future optional tier.
 
-Add a `capabilities` probe at startup; if streaming ASR/TTS/LLM is unsupported,
-fall back to buffered mode per service (see §6.1).
-
+Each service's transport is selected from `streaming.*_mode` at startup; the
+buffered adapters are the fallback per service (see §6.1).
 ### 6.1 Fallback tiering (streaming vs buffered)
 
 Every service has a **buffered floor** that maps 1:1 to the current repo, so the
@@ -509,7 +520,7 @@ work (ring buffers, cancellation, resampling, test harness) dominates the risk.
 | Risk | Mitigation |
 |---|---|
 | openwakeword ONNX preprocessing differs from Python | same models + golden-audio parity test |
-| Server does not support streaming ASR/TTS | capability probe + buffered fallback |
+| Server does not support streaming ASR/TTS | select buffered mode per service in config |
 | `qwen3.5-4b` tool-calling may need server-side parser config | verify early in Phase 4 |
 | Realtime endpoint availability on your server | keep it an adapter, not a hard dependency |
 | AEC for barge-in is non-trivial | start with mic gating; add AEC in Phase 6 |
@@ -520,6 +531,6 @@ work (ring buffers, cancellation, resampling, test harness) dominates the risk.
 ## 12. Immediate next steps
 
 1. Rotate the API key and move config out of source.
-2. Confirm server capabilities: LLM SSE, TTS `stream`/pcm, ASR `stream`/Realtime.
+2. Confirm the servers expose the streaming endpoints you intend to use.
 3. Scaffold the Phase 1 CMake skeleton and the interface headers in §5.
 4. Build the mock OpenAI server + golden audio corpus to lock in tests.

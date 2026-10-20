@@ -21,6 +21,7 @@ REPLY_TEXT = "mock reply: pong"
 FINAL_TEXT = "mock final reply"
 SPECULATIVE_TEXT = "mock speculative reply"
 TRANSCRIPT_TEXT = "mock transcript"
+FAIL_LIVE = False
 
 
 def tone_pcm() -> bytes:
@@ -141,7 +142,11 @@ class Handler(BaseHTTPRequestHandler):
                 return None
 
     def _live_asr(self) -> None:
-        mismatch = "mismatch=1" in self.path
+        if FAIL_LIVE:
+            self._send_json(500, {"error": {"message": "live ASR disabled for this test"}})
+            return
+
+        mismatch = "mismatch" in self.path
         partial_text = TRANSCRIPT_TEXT
         final_text = "mock transcript final" if mismatch else TRANSCRIPT_TEXT
 
@@ -282,10 +287,14 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    global FAIL_LIVE
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8099)
     parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--fail-live", action="store_true", help="reject live ASR requests")
     args = parser.parse_args()
+    FAIL_LIVE = args.fail_live
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"mock openai server on http://{args.host}:{args.port}", flush=True)
     server.serve_forever()
