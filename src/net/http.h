@@ -45,6 +45,9 @@ struct HttpResult {
 class HttpClient {
  public:
   using ChunkCallback = std::function<void(const uint8_t* data, std::size_t size)>;
+  // Fills up to `capacity` bytes; returns the number written, 0 for end of body.
+  // May block; the request is sent with chunked Transfer-Encoding.
+  using ReadCallback = std::function<std::size_t(uint8_t* buffer, std::size_t capacity)>;
 
   HttpClient();
   ~HttpClient();
@@ -67,6 +70,13 @@ class HttpClient {
   HttpResult post_json_stream(const std::string& url, const Headers& headers,
                               const std::string& json, const ChunkCallback& on_chunk,
                               const util::CancelToken& cancel = {});
+
+  // Full-duplex request: `read` produces the chunked request body while
+  // `on_chunk` receives the response body on the same connection. Used for live
+  // ASR ingest. Blocking inside `read` is allowed.
+  HttpResult post_duplex(const std::string& url, const Headers& headers,
+                         const ReadCallback& read, const ChunkCallback& on_chunk,
+                         const util::CancelToken& cancel = {});
 
  private:
   HttpResult perform(const std::string& url, const Headers& headers, bool is_post,

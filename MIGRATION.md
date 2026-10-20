@@ -122,6 +122,28 @@ Decisions assumed (confirmed):
   from every `Listening` block regardless of resampler output. `run_file()` takes
   a configurable block size and `tests/listen_test.sh` runs the pause fixture
   with 1-frame blocks to force the condition - PASSING.
+- **Step 10 (phase 2, streaming LLM + TTS):** `src/net/sse` (incremental SSE
+  parser); `SseLlmClient` (llama.cpp `/v1/chat/completions`, `stream=true`,
+  `cache_prompt`, reconstructs tool calls from deltas); `StreamPcmTtsClient`
+  (audio.cpp `/v1/audio/speech`, `stream_format=audio` + `response_format=pcm`,
+  raw PCM chunks); `src/agent/sentence_splitter` (sentence/clause/word-cap
+  flush policy); `src/app/responder` (LLM tokens -> splitter -> one ordered TTS
+  worker -> player or `--out` file; the player starts on the first chunk).
+  New `streaming` config block (audio/llm base URLs, models, modes, TTS PCM
+  rate, `llm_cache_prompt`); defaults stay buffered. Mock server gains SSE chat
+  and chunked raw-PCM speech. `integration.sh` covers SSE LLM/streaming TTS and
+  `listen_test.sh` covers the full streaming pipeline - PASSING.
+- **Step 11 (phase 3, live ASR):** `HttpClient::post_duplex` (chunked request
+  body + streaming response on one connection); `LiveAsrClient` (audio.cpp
+  `/v1/audio/transcriptions/live`, 16 kHz mono PCM pushed while `Listening`,
+  SSE `transcript.text.delta`/`.done`, blocking `commit`); `FallbackAsrClient`
+  (retains every pushed frame and replays the same utterance through the
+  buffered endpoint if the live request fails before a final transcript).
+  The orchestrator now starts ASR at wake, pushes the 16 kHz stream during
+  `Listening`, commits at the endpoint, and aborts in `reset_turn`. Mock server
+  gains the chunked live-ingest endpoint; `integration.sh` covers live
+  transcribe/roundtrip and the live -> buffered fallback, `listen_test.sh`
+  covers the live pipeline - PASSING.
 
 ---
 

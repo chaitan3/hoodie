@@ -26,6 +26,11 @@ struct WriteContext {
   const util::CancelToken* cancel = nullptr;
 };
 
+struct ReadContext {
+  const HttpClient::ReadCallback* read = nullptr;
+  const util::CancelToken* cancel = nullptr;
+};
+
 size_t write_callback(char* ptr, size_t size, size_t nmemb, void* userdata) {
   auto* ctx = static_cast<WriteContext*>(userdata);
   const std::size_t count = size * nmemb;
@@ -37,6 +42,12 @@ size_t write_callback(char* ptr, size_t size, size_t nmemb, void* userdata) {
     ctx->body->insert(ctx->body->end(), bytes, bytes + count);
   }
   return count;
+}
+
+size_t read_callback(char* ptr, size_t size, size_t nmemb, void* userdata) {
+  auto* ctx = static_cast<ReadContext*>(userdata);
+  if (ctx->cancel != nullptr && ctx->cancel->cancelled()) return CURL_READFUNC_ABORT;
+  return (*ctx->read)(reinterpret_cast<uint8_t*>(ptr), size * nmemb);
 }
 
 std::string trim(const std::string& s) {
@@ -96,6 +107,82 @@ HttpResult HttpClient::post_json_stream(const std::string& url, const Headers& h
                                         const std::string& json, const ChunkCallback& on_chunk,
                                         const util::CancelToken& cancel) {
   return perform(url, headers, /*is_post=*/true, json, nullptr, &on_chunk, cancel);
+}
+
+HttpResult HttpClient::post_duplex(const std::string& url, const Headers& headers,
+                                   const ReadCallback& read, const ChunkCallback& on_chunk,
+                                   const util::CancelToken& cancel) {
+  HttpResult result;
+
+  CURL* curl = curl_easy_init();
+  if (curl == nullptr) {
+    result.transport_error = true;
+    result.error = "curl_easy_init failed";
+    return result;
+  }
+
+  WriteContext write_ctx;
+  write_ctx.body = &result.body;
+  write_ctx.on_chunk = &on_chunk;
+  write_ctx.cancel = &cancel;
+
+  ReadContext read_ctx;
+  read_ctx.read = &read;
+  read_ctx.cancel = &cancel;
+
+  char error_buffer[CURL_ERROR_SIZE] = {0};
+
+  curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+  curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15L);
+  curl_easy_setopt(curl, CURLOPT_TIMEOUT, 600L);
+  curl_easy_setopt(curl, CURLOPT_USERAGENT, "hoodie/0.1");
+  curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error_buffer);
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, &write_callback);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &write_ctx);
+  curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, &header_callback);
+  curl_easy_setopt(curl, CURLOPT_HEADERDATA, &result);
+  curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, &progress_callback);
+  curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &cancel);
+  curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+
+  // Chunked upload + POST, mirroring `curl -T - -X POST` (unknown body size).
+  curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
+  curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "POST");
+  curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, static_cast<curl_off_t>(-1));
+  curl_easy_setopt(curl, CURLOPT_READFUNCTION, &read_callback);
+  curl_easy_setopt(curl, CURLOPT_READDATA, &read_ctx);
+
+  struct curl_slist* header_list = nullptr;
+  for (const auto& header : headers) {
+    header_list = curl_slist_append(header_list, (header.first + ": " + header.second).c_str());
+  }
+  if (header_list != nullptr) curl_easy_setopt(curl, CURLOPT_HTTPHEADER, header_list);
+
+  const CURLcode code = curl_easy_perform(curl);
+
+  curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &result.status);
+  const auto content_type = result.headers.find("content-type");
+  if (content_type != result.headers.end()) {
+    result.content_type = content_type->second;
+  }
+
+  if (code != CURLE_OK) {
+    if (cancel.cancelled()) {
+      result.cancelled = true;
+      result.error = "request cancelled";
+    } else if (code == CURLE_OPERATION_TIMEDOUT) {
+      result.transport_error = true;
+      result.error = "request timed out";
+    } else {
+      result.transport_error = true;
+      result.error = error_buffer[0] != '\0' ? error_buffer : curl_easy_strerror(code);
+    }
+  }
+
+  if (header_list != nullptr) curl_slist_free_all(header_list);
+  curl_easy_cleanup(curl);
+  return result;
 }
 
 HttpResult HttpClient::perform(const std::string& url, const Headers& headers, bool is_post,

@@ -122,6 +122,27 @@ size=$(stat -c%s "$WORK/stream_reply.wav")
 [[ "$size" -gt 10000 ]] || fail "streaming: reply audio too small: $size bytes"
 pass "streaming pipeline (SSE LLM + splitter + PCM TTS, reply $size bytes)"
 
+# --- Live ASR pipeline -------------------------------------------------------
+LIVE_CONFIG="$WORK/live.json"
+python3 - "$STREAM_CONFIG" "$LIVE_CONFIG" <<'PY'
+import json, sys
+src, dst = sys.argv[1], sys.argv[2]
+cfg = json.load(open(src))
+cfg["streaming"]["asr_mode"] = "live"
+json.dump(cfg, open(dst, "w"))
+PY
+
+if ! "$BIN" -c "$LIVE_CONFIG" --listen-wav "$WORK/listen_pause.wav" \
+    --out "$WORK/live_reply.wav" >"$WORK/live.log" 2>&1; then
+  fail "live asr pipeline failed: $(tail -1 "$WORK/live.log")"
+fi
+grep -q "transcript: mock transcript" "$WORK/live.log" || fail "live: missing transcript"
+grep -q "reply: mock final reply" "$WORK/live.log" || fail "live: missing reply"
+[[ -s "$WORK/live_reply.wav" ]] || fail "live: no reply audio"
+size=$(stat -c%s "$WORK/live_reply.wav")
+[[ "$size" -gt 10000 ]] || fail "live: reply audio too small: $size bytes"
+pass "live ASR pipeline (reply $size bytes)"
+
 # --- Tiny input blocks must not drop utterance audio -------------------------
 # The resampler emits nothing for very small blocks; the utterance must keep
 # those samples anyway (regression: it kept only a fraction of the span).

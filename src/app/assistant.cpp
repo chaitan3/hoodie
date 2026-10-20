@@ -74,7 +74,7 @@ Assistant::Assistant(const Config& config, AssistantOptions options)
       ring_(1u << 16),
       scratch_(kScratchSamples) {}
 
-Assistant::~Assistant() = default;
+Assistant::~Assistant() { clients_.asr->stop(); }
 
 void Assistant::stop() {
   stopping_.store(true, std::memory_order_relaxed);
@@ -128,14 +128,33 @@ void Assistant::enter_listening() {
   utterance_.sample_rate = capture_rate_;
   utterance_.channels = 1;
   utterance_ready_ = false;
+  asr_partial_.clear();
+  asr_final_.clear();
   vad_.reset();
   endpointer_.reset();
+
+  try {
+    clients_.asr->start(cancel_, [this](const api::AsrDelta& delta) {
+      if (delta.is_final) {
+        asr_final_ = delta.text;
+      } else {
+        asr_partial_ = delta.text;
+        spdlog::debug("asr partial: {}", asr_partial_);
+      }
+    });
+  } catch (const std::exception& e) {
+    spdlog::error("asr start failed: {}", e.what());
+    reset_turn();
+    return;
+  }
+
   listening_since_ = std::chrono::steady_clock::now();
   utterance_started_at_ = std::chrono::system_clock::now();
   set_state(State::Listening);
 }
 
 void Assistant::reset_turn() {
+  clients_.asr->stop();
   utterance_ready_ = false;
   utterance_ = audio::AudioFrame{};
   utterance_.sample_rate = capture_rate_;
@@ -203,6 +222,16 @@ void Assistant::process_block(const audio::AudioFrame& mono) {
       utterance_.samples.insert(utterance_.samples.end(), mono.samples.begin(),
                                 mono.samples.end());
       if (!pcm16k_.empty()) {
+        audio::AudioFrame pcm16;
+        pcm16.sample_rate = audio::kSampleRate16k;
+        pcm16.channels = 1;
+        pcm16.samples = pcm16k_;
+        try {
+          clients_.asr->push(pcm16);
+        } catch (const std::exception& e) {
+          spdlog::warn("asr push failed: {}", e.what());
+        }
+
         const std::vector<float> probs = vad_.process(pcm16k_.data(), pcm16k_.size());
         for (float p : probs) endpointer_.push(p);
       }
@@ -265,7 +294,8 @@ void Assistant::respond() {
   std::string transcript;
   try {
     const auto t0 = std::chrono::steady_clock::now();
-    transcript = api::transcribe_blocking(*clients_.asr, utterance_, cancel_);
+    clients_.asr->commit();
+    transcript = asr_final_;
     spdlog::info("asr: {} ({:.2f} s)", clients_.asr->description(), elapsed_seconds(t0));
   } catch (const std::exception& e) {
     spdlog::error("asr failed: {}", e.what());

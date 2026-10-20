@@ -118,6 +118,53 @@ class Handler(BaseHTTPRequestHandler):
             events.append({"choices": [{"delta": {}, "finish_reason": "stop"}]})
         self._send_sse(events)
 
+    def _read_chunk_size(self):
+        while True:
+            line = self.rfile.readline()
+            if not line:
+                return None
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                return int(line, 16)
+            except ValueError:
+                return None
+
+    def _live_asr(self) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Transfer-Encoding", "chunked")
+        self.end_headers()
+
+        def sse(payload: dict) -> None:
+            data = ("data: " + json.dumps(payload) + "\n\n").encode()
+            self.wfile.write(f"{len(data):X}\r\n".encode() + data + b"\r\n")
+            self.wfile.flush()
+
+        total = 0
+        while True:
+            size = self._read_chunk_size()
+            if size is None:
+                break
+            if size == 0:
+                while True:  # consume trailers
+                    trailer = self.rfile.readline()
+                    if trailer in (b"\r\n", b"\n", b""):
+                        break
+                break
+            self.rfile.read(size)
+            self.rfile.read(2)  # trailing CRLF
+            total += size
+            if total >= 32000:  # ~1 s of 16 kHz s16le
+                sse({"type": "transcript.text.delta", "delta": "mock "})
+                total = 0
+
+        sse({"type": "transcript.text.done", "text": TRANSCRIPT_TEXT})
+        self.wfile.write(b"0\r\n\r\n")
+        self.wfile.flush()
+
     def do_GET(self):  # noqa: N802
         if self.path == "/health":
             self._send_json(200, {"status": "ok"})
@@ -125,6 +172,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(404, {"error": {"message": "not found"}})
 
     def do_POST(self):  # noqa: N802
+        if self.path.startswith("/v1/audio/transcriptions/live"):
+            self._live_asr()
+            return
         body = self._read_body()
         if self.path.endswith("/chat/completions"):
             try:

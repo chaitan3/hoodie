@@ -24,13 +24,20 @@ ClientSet make_clients(const Config& config, net::HttpClient& http) {
   const std::string tts_model =
       streaming.tts_model.empty() ? config.server.tts_model : streaming.tts_model;
 
-  // ASR: live ingest is added in phase 3; buffered remains the fallback.
+  // ASR: live ingest with an automatic buffered fallback.
   if (streaming.asr_mode == "live") {
-    spdlog::warn("asr: live mode is not implemented yet; using buffered");
+    auto live = std::make_unique<LiveAsrClient>(
+        http, join_url(audio_base, streaming.asr_live_path), asr_model, config.server.api_key,
+        /*sample_rate=*/16000, /*channels=*/1);
+    auto fallback = std::make_unique<BufferedAsrClient>(
+        http, config.resolve_url(config.server.asr_path), asr_model, config.server.api_key);
+    clients.asr = std::make_unique<FallbackAsrClient>(std::move(live), std::move(fallback));
+    spdlog::info("asr: live (buffered fallback) selected");
+  } else {
+    clients.asr = std::make_unique<BufferedAsrClient>(
+        http, config.resolve_url(config.server.asr_path), asr_model, config.server.api_key);
+    spdlog::info("asr: buffered selected");
   }
-  clients.asr = std::make_unique<BufferedAsrClient>(
-      http, config.resolve_url(config.server.asr_path), asr_model, config.server.api_key);
-  spdlog::info("asr: buffered selected");
 
   // TTS: audio.cpp raw-PCM stream, or the buffered OpenAI-compatible floor.
   if (streaming.tts_mode == "stream") {

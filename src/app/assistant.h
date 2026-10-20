@@ -99,6 +99,8 @@ class Assistant {
   audio::AudioFrame utterance_;  // mono, at the capture rate
   int capture_rate_ = 0;
   int capture_channels_ = 1;
+  std::string asr_partial_;
+  std::string asr_final_;
 
   std::atomic<State> state_{State::Idle};
   bool utterance_ready_ = false;
