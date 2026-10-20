@@ -143,6 +143,10 @@ HttpResult HttpClient::post_duplex(const std::string& url, const Headers& header
   char error_buffer[CURL_ERROR_SIZE] = {0};
 
   curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+  // Live ingest is defined in terms of HTTP/1.1 chunked upload. Forcing 1.1
+  // also avoids an HTTPS proxy terminating an h2 request body and buffering it
+  // before forwarding.
+  curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
   curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
   curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15L);
   curl_easy_setopt(curl, CURLOPT_TIMEOUT, 600L);

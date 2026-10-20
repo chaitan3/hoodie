@@ -286,6 +286,11 @@ void LiveAsrClient::worker_loop() {
       detail += " - ";
       detail += body.substr(0, 512);
     }
+    if (body.find("incrementally delivered body") != std::string::npos) {
+      detail +=
+          " (a reverse proxy is buffering the live upload; use a direct audio.cpp URL "
+          "or disable proxy request buffering)";
+    }
     std::lock_guard<std::mutex> lock(mutex_);
     error_ = std::make_exception_ptr(
         ApiError(result.status,
