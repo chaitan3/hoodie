@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <string>
 
 #include "api/openai_types.h"
@@ -8,24 +9,40 @@
 
 namespace hoodie::api {
 
-// Chat completion client. The tool-calling loop lives in the agent (Phase 4);
-// this layer only performs one request/response.
+struct LlmEvent {
+  enum class Kind { Token, ToolCall, Done };
+
+  Kind kind = Kind::Done;
+  std::string text;           // Kind::Token
+  ToolCall tool_call;         // Kind::ToolCall
+  std::string finish_reason;  // Kind::Done
+};
+
+// Streaming-first chat interface. The buffered floor emits the whole content as
+// one Token event, then any ToolCall events, then Done; streaming adapters emit
+// tokens as they arrive.
 class LlmClient {
  public:
   virtual ~LlmClient() = default;
 
-  virtual ChatResult chat(const ChatRequest& request, const util::CancelToken& cancel = {}) = 0;
+  virtual bool streaming() const = 0;
+
+  virtual void chat(const ChatRequest& request, const util::CancelToken& cancel,
+                    const std::function<void(const LlmEvent&)>& on_event) = 0;
+
   virtual std::string description() const = 0;
 };
 
-// Buffered floor: POST /chat/completions without `stream`, returning the whole
-// assistant message (including tool_calls when present).
+// Buffered floor: POST /chat/completions without stream, then replay the parsed
+// message as events. Matches the previous chat() behavior exactly.
 class BufferedLlmClient : public LlmClient {
  public:
   BufferedLlmClient(net::HttpClient& http, std::string url, std::string model,
                     std::string api_key);
 
-  ChatResult chat(const ChatRequest& request, const util::CancelToken& cancel = {}) override;
+  bool streaming() const override;
+  void chat(const ChatRequest& request, const util::CancelToken& cancel,
+            const std::function<void(const LlmEvent&)>& on_event) override;
   std::string description() const override;
 
  private:
@@ -34,5 +51,9 @@ class BufferedLlmClient : public LlmClient {
   std::string model_;
   std::string api_key_;
 };
+
+// Convenience: collect events into the old ChatResult shape (CLI/diagnostics).
+ChatResult chat_blocking(LlmClient& client, const ChatRequest& request,
+                         const util::CancelToken& cancel = {});
 
 }  // namespace hoodie::api

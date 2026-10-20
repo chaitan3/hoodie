@@ -35,7 +35,7 @@ std::string chat_once(ApiContext& ctx, const ApiCommandOptions& options, const s
       options.system_prompt.empty() ? kDefaultSystemPrompt : options.system_prompt));
   request.messages.push_back(api::Message::user(prompt));
 
-  const api::ChatResult result = ctx.clients.llm->chat(request);
+  const api::ChatResult result = api::chat_blocking(*ctx.clients.llm, request);
   return result.message.content;
 }
 
@@ -45,7 +45,7 @@ int run_transcribe(const Config& config, const ApiCommandOptions& /*options*/,
                    const std::string& audio_file) {
   ApiContext ctx(config);
   const audio::AudioFrame frame = audio::read_audio_file(audio_file);
-  const std::string text = ctx.clients.asr->transcribe(frame);
+  const std::string text = api::transcribe_blocking(*ctx.clients.asr, frame);
   std::cout << text << "\n";
   return 0;
 }
@@ -69,7 +69,8 @@ int run_agent(const Config& config, const ApiCommandOptions& options, const std:
   std::cout << result.text << "\n";
   spdlog::info("agent: completed in {} step(s)", result.steps);
 
-  const audio::AudioFrame speech = ctx.clients.tts->synthesize(agent::normalize_for_tts(result.text));
+  const audio::AudioFrame speech =
+      api::synthesize_blocking(*ctx.clients.tts, agent::normalize_for_tts(result.text));
   play_or_write(speech, options.out_file, options.output_device);
 
   if (tool_context.music.has_value()) {
@@ -80,7 +81,8 @@ int run_agent(const Config& config, const ApiCommandOptions& options, const std:
 
 int run_say(const Config& config, const ApiCommandOptions& options, const std::string& text) {
   ApiContext ctx(config);
-  const audio::AudioFrame audio = ctx.clients.tts->synthesize(agent::normalize_for_tts(text));
+  const audio::AudioFrame audio =
+      api::synthesize_blocking(*ctx.clients.tts, agent::normalize_for_tts(text));
   play_or_write(audio, options.out_file, options.output_device);
   return 0;
 }
@@ -90,7 +92,7 @@ int run_roundtrip(const Config& config, const ApiCommandOptions& options,
   ApiContext ctx(config);
 
   const audio::AudioFrame frame = audio::read_audio_file(audio_file);
-  const std::string transcript = ctx.clients.asr->transcribe(frame);
+  const std::string transcript = api::transcribe_blocking(*ctx.clients.asr, frame);
   spdlog::info("transcript: {}", transcript);
   std::cout << transcript << "\n";
 
@@ -104,7 +106,8 @@ int run_roundtrip(const Config& config, const ApiCommandOptions& options,
   spdlog::info("reply: {}", result.text);
   std::cout << result.text << "\n";
 
-  const audio::AudioFrame speech = ctx.clients.tts->synthesize(agent::normalize_for_tts(result.text));
+  const audio::AudioFrame speech =
+      api::synthesize_blocking(*ctx.clients.tts, agent::normalize_for_tts(result.text));
   play_or_write(speech, options.out_file, options.output_device);
 
   if (tool_context.music.has_value()) {

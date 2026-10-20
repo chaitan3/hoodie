@@ -264,7 +264,7 @@ void Assistant::respond() {
   std::string transcript;
   try {
     const auto t0 = std::chrono::steady_clock::now();
-    transcript = clients_.asr->transcribe(utterance_, cancel_);
+    transcript = api::transcribe_blocking(*clients_.asr, utterance_, cancel_);
     spdlog::info("asr: {} ({:.2f} s)", clients_.asr->description(), elapsed_seconds(t0));
   } catch (const std::exception& e) {
     spdlog::error("asr failed: {}", e.what());
@@ -305,8 +305,18 @@ void Assistant::respond() {
   set_state(State::Speaking);
   try {
     const auto t0 = std::chrono::steady_clock::now();
-    const audio::AudioFrame speech =
-        clients_.tts->synthesize(agent::normalize_for_tts(result.text), cancel_);
+    const std::string spoken = agent::normalize_for_tts(result.text);
+    audio::AudioFrame speech;
+    clients_.tts->synthesize(
+        spoken, cancel_,
+        [&](const audio::AudioFrame& chunk) {
+          if (speech.samples.empty()) {
+            speech.sample_rate = chunk.sample_rate;
+            speech.channels = chunk.channels;
+          }
+          speech.samples.insert(speech.samples.end(), chunk.samples.begin(), chunk.samples.end());
+        },
+        [] {});
     spdlog::info("tts: {:.2f} s of audio ({:.2f} s)", speech.duration_seconds(),
                  elapsed_seconds(t0));
     play_or_write(speech, options_.out_file, options_.output_device);

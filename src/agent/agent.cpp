@@ -4,6 +4,7 @@
 
 #include <exception>
 #include <utility>
+#include <vector>
 
 namespace hoodie::agent {
 
@@ -22,17 +23,36 @@ Agent::Result Agent::run(const std::string& input, ToolContext& context,
     request.messages = messages;
     if (!tools_.empty()) request.tools_json = tools_.tools_json();
 
-    const api::ChatResult response = llm_.chat(request, cancel);
-    messages.push_back(response.message);
+    std::string content;
+    std::vector<api::ToolCall> tool_calls;
+    llm_.chat(request, cancel, [&](const api::LlmEvent& event) {
+      switch (event.kind) {
+        case api::LlmEvent::Kind::Token:
+          content += event.text;
+          break;
+        case api::LlmEvent::Kind::ToolCall:
+          tool_calls.push_back(event.tool_call);
+          break;
+        case api::LlmEvent::Kind::Done:
+          spdlog::debug("agent: finish_reason={}", event.finish_reason);
+          break;
+      }
+    });
 
-    if (response.message.tool_calls.empty()) {
-      result.text = response.message.content;
+    api::Message assistant;
+    assistant.role = "assistant";
+    assistant.content = content;
+    assistant.tool_calls = tool_calls;
+    messages.push_back(std::move(assistant));
+
+    if (tool_calls.empty()) {
+      result.text = std::move(content);
       result.steps = step;
       result.messages = std::move(messages);
       return result;
     }
 
-    for (const api::ToolCall& call : response.message.tool_calls) {
+    for (const api::ToolCall& call : tool_calls) {
       spdlog::info("agent: tool {} args={}", call.name, call.arguments);
       std::string output;
       try {
