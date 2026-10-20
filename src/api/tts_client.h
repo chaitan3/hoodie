@@ -46,6 +46,29 @@ class BufferedTtsClient : public TtsClient {
   std::string response_format_;
 };
 
+// audio.cpp raw-PCM streaming client: stream_format=audio, response_format=pcm.
+// The server emits interleaved s16le at a model-specific rate (configured),
+// chunked; each chunk is forwarded as an AudioFrame as it arrives.
+class StreamPcmTtsClient : public TtsClient {
+ public:
+  StreamPcmTtsClient(net::HttpClient& http, std::string url, std::string model,
+                     std::string api_key, int pcm_rate, int pcm_channels);
+
+  bool streaming() const override;
+  void synthesize(const std::string& text, const util::CancelToken& cancel,
+                  std::function<void(const audio::AudioFrame&)> on_chunk,
+                  std::function<void()> on_done) override;
+  std::string description() const override;
+
+ private:
+  net::HttpClient& http_;
+  std::string url_;
+  std::string model_;
+  std::string api_key_;
+  int pcm_rate_ = 24000;
+  int pcm_channels_ = 1;
+};
+
 // Convenience for callers that only want the complete clip (CLI/diagnostics).
 audio::AudioFrame synthesize_blocking(TtsClient& client, const std::string& text,
                                       const util::CancelToken& cancel = {});

@@ -63,6 +63,61 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_chunked(self, content_type: str, chunks) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Transfer-Encoding", "chunked")
+        self.end_headers()
+        for chunk in chunks:
+            if not chunk:
+                continue
+            self.wfile.write(f"{len(chunk):X}\r\n".encode() + chunk + b"\r\n")
+            self.wfile.flush()
+        self.wfile.write(b"0\r\n\r\n")
+        self.wfile.flush()
+
+    def _send_sse(self, events) -> None:
+        payloads = [("data: " + json.dumps(event) + "\n\n").encode() for event in events]
+        payloads.append(b"data: [DONE]\n\n")
+        self._send_chunked("text/event-stream", payloads)
+
+    def _send_llm_stream(self, request) -> None:
+        tools = request.get("tools") or []
+        messages = request.get("messages") or []
+        used_tool = any(m.get("role") == "tool" for m in messages)
+        events = []
+        if tools and not used_tool:
+            events.append(
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "role": "assistant",
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "call_1",
+                                        "type": "function",
+                                        "function": {"name": "get_time", "arguments": ""},
+                                    }
+                                ],
+                            }
+                        }
+                    ]
+                }
+            )
+            events.append(
+                {"choices": [{"delta": {"tool_calls": [{"index": 0, "function": {"arguments": "{}"}}]}}]}
+            )
+            events.append({"choices": [{"delta": {}, "finish_reason": "tool_calls"}]})
+        else:
+            text = FINAL_TEXT if (tools and used_tool) else REPLY_TEXT
+            for i in range(0, len(text), 8):
+                events.append({"choices": [{"delta": {"content": text[i : i + 8]}}]})
+            events.append({"choices": [{"delta": {}, "finish_reason": "stop"}]})
+        self._send_sse(events)
+
     def do_GET(self):  # noqa: N802
         if self.path == "/health":
             self._send_json(200, {"status": "ok"})
@@ -79,7 +134,9 @@ class Handler(BaseHTTPRequestHandler):
             tools = request.get("tools") or []
             messages = request.get("messages") or []
             used_tool = any(m.get("role") == "tool" for m in messages)
-            if tools and not used_tool:
+            if request.get("stream"):
+                self._send_llm_stream(request)
+            elif tools and not used_tool:
                 # Scripted first round: ask the client to call get_time.
                 self._send_json(
                     200,
@@ -135,7 +192,12 @@ class Handler(BaseHTTPRequestHandler):
             except json.JSONDecodeError:
                 request = {}
             pcm = tone_pcm()
-            if request.get("response_format") == "pcm":
+            if request.get("stream_format") == "audio" and request.get("response_format") == "pcm":
+                third = max(1, len(pcm) // 3)
+                self._send_chunked(
+                    "audio/pcm", [pcm[i : i + third] for i in range(0, len(pcm), third)]
+                )
+            elif request.get("response_format") == "pcm":
                 self._send_bytes(200, "audio/pcm", pcm)
             else:
                 self._send_bytes(200, "audio/wav", pcm_to_wav(pcm))

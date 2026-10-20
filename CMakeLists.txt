@@ -20,6 +20,7 @@ add_executable(hoodie
   src/app/api_commands.cpp
   src/app/assistant.cpp
   src/app/playback.cpp
+  src/app/responder.cpp
   src/util/logging.cpp
   src/audio/capture.cpp
   src/audio/devices.cpp
@@ -27,6 +28,7 @@ add_executable(hoodie
   src/audio/resampler.cpp
   src/audio/wav.cpp
   src/net/http.cpp
+  src/net/sse.cpp
   src/api/asr_client.cpp
   src/api/tts_client.cpp
   src/api/llm_client.cpp
@@ -41,6 +43,7 @@ add_executable(hoodie
   src/agent/tool_registry.cpp
   src/agent/tools.cpp
   src/agent/agent.cpp
+  src/agent/sentence_splitter.cpp
 )
 
 target_include_directories(hoodie PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

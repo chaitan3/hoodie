@@ -54,6 +54,43 @@ echo "$out" | grep -q "mock transcript" || fail "roundtrip missing transcript"
 echo "$out" | grep -q "mock final reply" || fail "roundtrip missing agent reply"
 pass "--roundtrip"
 
+# --- Streaming tiers (SSE LLM + raw-PCM TTS) --------------------------------
+STREAM_CONFIG="$(mktemp --suffix=.json)"
+python3 - "$CONFIG" "$STREAM_CONFIG" "$PORT" <<'PY'
+import json, sys
+src, dst, port = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(src) as f:
+    cfg = json.load(f)
+cfg["streaming"] = {
+    "audio_base_url": f"http://127.0.0.1:{port}",
+    "llm_base_url": f"http://127.0.0.1:{port}",
+    "asr_mode": "buffered",
+    "tts_mode": "stream",
+    "llm_mode": "stream",
+    "tts_pcm_rate": 24000,
+    "tts_pcm_channels": 1,
+    "llm_cache_prompt": True,
+}
+with open(dst, "w") as f:
+    json.dump(cfg, f)
+PY
+
+out="$("$BIN" -c "$STREAM_CONFIG" --ask "ping")"
+[[ "$out" == "mock reply: pong" ]] || fail "streaming ask output was: '$out'"
+pass "--ask (SSE LLM)"
+
+"$BIN" -c "$STREAM_CONFIG" --say "hello" --out "$OUT_WAV" >/dev/null
+[[ -s "$OUT_WAV" ]] || fail "streaming tts wrote no output"
+size=$(stat -c%s "$OUT_WAV")
+[[ "$size" -gt 10000 ]] || fail "streaming tts output too small: $size bytes"
+pass "--say (streaming PCM, wrote $size bytes)"
+
+out="$("$BIN" -c "$STREAM_CONFIG" --roundtrip "$ROOT/beep.ogg" --out "$OUT_WAV")"
+echo "$out" | grep -q "mock transcript" || fail "streaming roundtrip missing transcript"
+echo "$out" | grep -q "mock final reply" || fail "streaming roundtrip missing agent reply"
+pass "--roundtrip (SSE LLM + streaming TTS)"
+rm -f "$STREAM_CONFIG"
+
 # --- Error handling ----------------------------------------------------------
 if HOODIE_BASE_URL="http://127.0.0.1:1" "$BIN" -c "$CONFIG" --ask "ping" >/dev/null 2>&1; then
   fail "expected failure against a dead server"

@@ -57,12 +57,38 @@ struct AssistantConfig {
   double listen_timeout_s = 8.0;  // max silence after wake before giving up
 };
 
+// Streaming servers (audio.cpp for ASR/TTS, llama.cpp for the LLM). Empty base
+// URLs fall back to server.base_url. Modes default to buffered so an existing
+// config keeps its current behavior.
+struct StreamingConfig {
+  std::string audio_base_url;  // audio.cpp (live/SSE ASR, streaming TTS)
+  std::string llm_base_url;    // llama.cpp
+
+  std::string asr_model;  // empty -> server.asr_model
+  std::string tts_model;  // empty -> server.tts_model
+
+  std::string asr_live_path = "/v1/audio/transcriptions/live";
+  std::string asr_sse_path = "/v1/audio/transcriptions";
+  std::string tts_path = "/v1/audio/speech";
+  std::string llm_path = "/v1/chat/completions";
+
+  int tts_pcm_rate = 24000;
+  int tts_pcm_channels = 1;
+
+  std::string asr_mode = "buffered";  // buffered | live
+  std::string tts_mode = "buffered";  // buffered | stream
+  std::string llm_mode = "buffered";  // buffered | stream
+
+  bool llm_cache_prompt = true;  // llama.cpp cache_prompt extension
+};
+
 struct Config {
   ServerConfig server;
   Capabilities capabilities;
   WakeWordConfig wakeword;
   AudioConfig audio;
   AssistantConfig assistant;
+  StreamingConfig streaming;
 
   // Load and validate configuration. Throws std::runtime_error on failure.
   // Applies HOODIE_API_KEY / HOODIE_BASE_URL environment overrides.
@@ -78,5 +104,8 @@ struct Config {
   // Human-readable dump with the API key redacted.
   std::string summary() const;
 };
+
+// Join a base URL and a path with exactly one slash.
+std::string join_url(const std::string& base_url, const std::string& path);
 
 }  // namespace hoodie

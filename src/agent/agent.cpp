@@ -9,7 +9,7 @@
 namespace hoodie::agent {
 
 Agent::Result Agent::run(const std::string& input, ToolContext& context,
-                         const util::CancelToken& cancel) {
+                         const util::CancelToken& cancel, const TextCallback& on_text) {
   std::vector<api::Message> messages;
   messages.push_back(api::Message::system(options_.system_prompt));
   messages.push_back(api::Message::user(input));
@@ -28,6 +28,7 @@ Agent::Result Agent::run(const std::string& input, ToolContext& context,
     llm_.chat(request, cancel, [&](const api::LlmEvent& event) {
       switch (event.kind) {
         case api::LlmEvent::Kind::Token:
+          if (on_text) on_text(event.text);
           content += event.text;
           break;
         case api::LlmEvent::Kind::ToolCall:

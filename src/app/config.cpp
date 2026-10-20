@@ -4,6 +4,7 @@
 
 #include <cstdlib>
 #include <fstream>
+#include <initializer_list>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -90,6 +91,7 @@ Config Config::load(const std::string& path) {
   const json& wake = sub(root, "wakeword");
   const json& audio = sub(root, "audio");
   const json& assistant = sub(root, "assistant");
+  const json& streaming = sub(root, "streaming");
 
   cfg.server.base_url = get_string(server, "base_url", cfg.server.base_url);
   cfg.server.api_key = get_string(server, "api_key", cfg.server.api_key);
@@ -128,6 +130,28 @@ Config Config::load(const std::string& path) {
   cfg.assistant.listen_timeout_s =
       get_double(assistant, "listen_timeout_s", cfg.assistant.listen_timeout_s);
 
+  cfg.streaming.audio_base_url =
+      get_string(streaming, "audio_base_url", cfg.streaming.audio_base_url);
+  cfg.streaming.llm_base_url =
+      get_string(streaming, "llm_base_url", cfg.streaming.llm_base_url);
+  cfg.streaming.asr_model = get_string(streaming, "asr_model", cfg.streaming.asr_model);
+  cfg.streaming.tts_model = get_string(streaming, "tts_model", cfg.streaming.tts_model);
+  cfg.streaming.asr_live_path =
+      get_string(streaming, "asr_live_path", cfg.streaming.asr_live_path);
+  cfg.streaming.asr_sse_path =
+      get_string(streaming, "asr_sse_path", cfg.streaming.asr_sse_path);
+  cfg.streaming.tts_path = get_string(streaming, "tts_path", cfg.streaming.tts_path);
+  cfg.streaming.llm_path = get_string(streaming, "llm_path", cfg.streaming.llm_path);
+  cfg.streaming.tts_pcm_rate =
+      get_int(streaming, "tts_pcm_rate", cfg.streaming.tts_pcm_rate);
+  cfg.streaming.tts_pcm_channels =
+      get_int(streaming, "tts_pcm_channels", cfg.streaming.tts_pcm_channels);
+  cfg.streaming.asr_mode = get_string(streaming, "asr_mode", cfg.streaming.asr_mode);
+  cfg.streaming.tts_mode = get_string(streaming, "tts_mode", cfg.streaming.tts_mode);
+  cfg.streaming.llm_mode = get_string(streaming, "llm_mode", cfg.streaming.llm_mode);
+  cfg.streaming.llm_cache_prompt =
+      get_bool(streaming, "llm_cache_prompt", cfg.streaming.llm_cache_prompt);
+
   // Environment overrides win over the file, so secrets can stay out of it.
   apply_env_override("HOODIE_API_KEY", cfg.server.api_key);
   apply_env_override("HOODIE_BASE_URL", cfg.server.base_url);
@@ -144,6 +168,19 @@ Config Config::load(const std::string& path) {
   if (cfg.assistant.listen_timeout_s <= 0.0) {
     throw std::runtime_error("config: assistant.listen_timeout_s must be positive");
   }
+  const auto valid_mode = [](const std::string& mode, std::initializer_list<const char*> allowed,
+                             const char* key) {
+    for (const char* candidate : allowed) {
+      if (mode == candidate) return;
+    }
+    throw std::runtime_error(std::string("config: ") + key + " has invalid value '" + mode + "'");
+  };
+  valid_mode(cfg.streaming.asr_mode, {"buffered", "live"}, "streaming.asr_mode");
+  valid_mode(cfg.streaming.tts_mode, {"buffered", "stream"}, "streaming.tts_mode");
+  valid_mode(cfg.streaming.llm_mode, {"buffered", "stream"}, "streaming.llm_mode");
+  if (cfg.streaming.tts_pcm_rate <= 0 || cfg.streaming.tts_pcm_channels <= 0) {
+    throw std::runtime_error("config: streaming.tts_pcm_rate/channels must be positive");
+  }
   return cfg;
 }
 
@@ -159,14 +196,18 @@ Config Config::load_or_default(const std::string& path) {
   return load(path);
 }
 
-std::string Config::resolve_url(const std::string& path) const {
-  if (server.base_url.empty()) return path;
-  if (path.empty()) return server.base_url;
-  const bool base_slash = server.base_url.back() == '/';
+std::string join_url(const std::string& base_url, const std::string& path) {
+  if (base_url.empty()) return path;
+  if (path.empty()) return base_url;
+  const bool base_slash = base_url.back() == '/';
   const bool path_slash = path.front() == '/';
-  if (base_slash && path_slash) return server.base_url + path.substr(1);
-  if (!base_slash && !path_slash) return server.base_url + "/" + path;
-  return server.base_url + path;
+  if (base_slash && path_slash) return base_url + path.substr(1);
+  if (!base_slash && !path_slash) return base_url + "/" + path;
+  return base_url + path;
+}
+
+std::string Config::resolve_url(const std::string& path) const {
+  return join_url(server.base_url, path);
 }
 
 std::string Config::summary() const {
@@ -191,7 +232,16 @@ std::string Config::summary() const {
       << (audio.output_device.empty() ? "<default>" : audio.output_device) << "\n"
       << "  audio.capture_rate   = " << audio.capture_sample_rate << "\n"
       << "  assistant.min_utterance_ms = " << assistant.min_utterance_ms << "\n"
-      << "  assistant.listen_timeout_s = " << assistant.listen_timeout_s << "\n";
+      << "  assistant.listen_timeout_s = " << assistant.listen_timeout_s << "\n"
+      << "  streaming.asr_mode   = " << streaming.asr_mode << "\n"
+      << "  streaming.tts_mode   = " << streaming.tts_mode
+      << "  (pcm " << streaming.tts_pcm_rate << " Hz, " << streaming.tts_pcm_channels << " ch)\n"
+      << "  streaming.llm_mode   = " << streaming.llm_mode << "\n"
+      << "  streaming.audio_url  = "
+      << (streaming.audio_base_url.empty() ? "<server.base_url>" : streaming.audio_base_url)
+      << "\n"
+      << "  streaming.llm_url    = "
+      << (streaming.llm_base_url.empty() ? "<server.base_url>" : streaming.llm_base_url) << "\n";
   return out.str();
 }
 

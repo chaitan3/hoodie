@@ -100,7 +100,7 @@ class Assistant {
   int capture_rate_ = 0;
   int capture_channels_ = 1;
 
-  State state_ = State::Idle;
+  std::atomic<State> state_{State::Idle};
   bool utterance_ready_ = false;
   bool wake_high_ = false;  // rising-edge guard so a stale context does not re-trigger
   int utterance_counter_ = 0;

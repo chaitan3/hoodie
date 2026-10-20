@@ -52,6 +52,26 @@ class BufferedLlmClient : public LlmClient {
   std::string api_key_;
 };
 
+// llama.cpp / OpenAI-compatible SSE streaming client. Emits Token events as
+// delta.content arrives and reconstructs tool calls from delta.tool_calls.
+class SseLlmClient : public LlmClient {
+ public:
+  SseLlmClient(net::HttpClient& http, std::string url, std::string model, std::string api_key,
+               bool cache_prompt = true);
+
+  bool streaming() const override;
+  void chat(const ChatRequest& request, const util::CancelToken& cancel,
+            const std::function<void(const LlmEvent&)>& on_event) override;
+  std::string description() const override;
+
+ private:
+  net::HttpClient& http_;
+  std::string url_;
+  std::string model_;
+  std::string api_key_;
+  bool cache_prompt_ = true;
+};
+
 // Convenience: collect events into the old ChatResult shape (CLI/diagnostics).
 ChatResult chat_blocking(LlmClient& client, const ChatRequest& request,
                          const util::CancelToken& cancel = {});

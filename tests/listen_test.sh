@@ -60,6 +60,26 @@ for _ in $(seq 1 50); do
 done
 curl -sf "http://127.0.0.1:$PORT/health" >/dev/null || fail "mock server did not start"
 
+STREAM_CONFIG="$WORK/streaming.json"
+python3 - "$CONFIG" "$STREAM_CONFIG" "$PORT" <<'PY'
+import json, sys
+src, dst, port = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(src) as f:
+    cfg = json.load(f)
+cfg["streaming"] = {
+    "audio_base_url": f"http://127.0.0.1:{port}",
+    "llm_base_url": f"http://127.0.0.1:{port}",
+    "asr_mode": "buffered",
+    "tts_mode": "stream",
+    "llm_mode": "stream",
+    "tts_pcm_rate": 24000,
+    "tts_pcm_channels": 1,
+    "llm_cache_prompt": True,
+}
+with open(dst, "w") as f:
+    json.dump(cfg, f)
+PY
+
 export HOODIE_BASE_URL="http://127.0.0.1:$PORT"
 export HOODIE_API_KEY="test-key"
 export HOODIE_LOG_LEVEL="info"
@@ -89,6 +109,18 @@ dur=$(grep -oE "\([0-9]+\.[0-9]+ s," "$WORK/pause.log" | head -1 | tr -cd '0-9.'
 [[ -n "$dur" ]] || fail "no utterance logged for the pause case"
 awk "BEGIN{exit !($dur > 1.5)}" || fail "utterance too short after a pause: ${dur}s"
 pass "pause after wake captured as one turn (utterance ${dur}s)"
+
+# --- Streaming pipeline: SSE LLM -> splitter -> raw-PCM TTS ------------------
+if ! "$BIN" -c "$STREAM_CONFIG" --listen-wav "$WORK/listen_pause.wav" \
+    --out "$WORK/stream_reply.wav" >"$WORK/stream.log" 2>&1; then
+  fail "streaming pipeline failed: $(tail -1 "$WORK/stream.log")"
+fi
+grep -q "transcript: mock transcript" "$WORK/stream.log" || fail "streaming: missing transcript"
+grep -q "reply: mock final reply" "$WORK/stream.log" || fail "streaming: missing reply"
+[[ -s "$WORK/stream_reply.wav" ]] || fail "streaming: no reply audio"
+size=$(stat -c%s "$WORK/stream_reply.wav")
+[[ "$size" -gt 10000 ]] || fail "streaming: reply audio too small: $size bytes"
+pass "streaming pipeline (SSE LLM + splitter + PCM TTS, reply $size bytes)"
 
 # --- Tiny input blocks must not drop utterance audio -------------------------
 # The resampler emits nothing for very small blocks; the utterance must keep

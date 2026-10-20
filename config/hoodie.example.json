@@ -34,5 +34,15 @@
   "assistant": {
     "min_utterance_ms": 1500,
     "listen_timeout_s": 8.0
+  },
+  "streaming": {
+    "audio_base_url": "",
+    "llm_base_url": "",
+    "asr_mode": "buffered",
+    "tts_mode": "buffered",
+    "llm_mode": "buffered",
+    "tts_pcm_rate": 24000,
+    "tts_pcm_channels": 1,
+    "llm_cache_prompt": true
   }
 }

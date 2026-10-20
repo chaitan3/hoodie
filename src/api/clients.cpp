@@ -2,34 +2,61 @@
 
 #include <spdlog/spdlog.h>
 
+#include <memory>
 #include <string>
+
+#include "api/asr_client.h"
+#include "api/llm_client.h"
+#include "api/tts_client.h"
 
 namespace hoodie::api {
 
 ClientSet make_clients(const Config& config, net::HttpClient& http) {
   ClientSet clients;
+  const StreamingConfig& streaming = config.streaming;
 
-  const std::string asr_url = config.resolve_url(config.server.asr_path);
-  const std::string tts_url = config.resolve_url(config.server.tts_path);
-  const std::string llm_url = config.resolve_url(config.server.llm_path);
+  const std::string audio_base =
+      streaming.audio_base_url.empty() ? config.server.base_url : streaming.audio_base_url;
+  const std::string llm_base =
+      streaming.llm_base_url.empty() ? config.server.base_url : streaming.llm_base_url;
+  const std::string asr_model =
+      streaming.asr_model.empty() ? config.server.asr_model : streaming.asr_model;
+  const std::string tts_model =
+      streaming.tts_model.empty() ? config.server.tts_model : streaming.tts_model;
 
-  if (config.capabilities.asr_stream) {
-    spdlog::info("asr: streaming requested; SSE client not implemented yet, using buffered fallback");
+  // ASR: live ingest is added in phase 3; buffered remains the fallback.
+  if (streaming.asr_mode == "live") {
+    spdlog::warn("asr: live mode is not implemented yet; using buffered");
   }
-  clients.asr = std::make_unique<BufferedAsrClient>(http, asr_url, config.server.asr_model,
-                                                    config.server.api_key);
+  clients.asr = std::make_unique<BufferedAsrClient>(
+      http, config.resolve_url(config.server.asr_path), asr_model, config.server.api_key);
+  spdlog::info("asr: buffered selected");
 
-  if (config.capabilities.tts_stream) {
-    spdlog::info("tts: streaming requested; chunked client not implemented yet, using buffered fallback");
+  // TTS: audio.cpp raw-PCM stream, or the buffered OpenAI-compatible floor.
+  if (streaming.tts_mode == "stream") {
+    clients.tts = std::make_unique<StreamPcmTtsClient>(
+        http, join_url(audio_base, streaming.tts_path), tts_model, config.server.api_key,
+        streaming.tts_pcm_rate, streaming.tts_pcm_channels);
+    spdlog::info("tts: streaming raw PCM selected");
+  } else {
+    clients.tts = std::make_unique<BufferedTtsClient>(
+        http, config.resolve_url(config.server.tts_path), config.server.tts_model,
+        config.server.api_key, config.capabilities.tts_format);
+    spdlog::info("tts: buffered selected");
   }
-  clients.tts = std::make_unique<BufferedTtsClient>(
-      http, tts_url, config.server.tts_model, config.server.api_key, config.capabilities.tts_format);
 
-  if (config.capabilities.llm_stream) {
-    spdlog::info("llm: streaming requested; SSE client not implemented yet, using buffered fallback");
+  // LLM: llama.cpp SSE, or the buffered OpenAI-compatible floor.
+  if (streaming.llm_mode == "stream") {
+    clients.llm = std::make_unique<SseLlmClient>(
+        http, join_url(llm_base, streaming.llm_path), config.server.llm_model,
+        config.server.api_key, streaming.llm_cache_prompt);
+    spdlog::info("llm: SSE streaming selected");
+  } else {
+    clients.llm = std::make_unique<BufferedLlmClient>(
+        http, config.resolve_url(config.server.llm_path), config.server.llm_model,
+        config.server.api_key);
+    spdlog::info("llm: buffered selected");
   }
-  clients.llm = std::make_unique<BufferedLlmClient>(http, llm_url, config.server.llm_model,
-                                                    config.server.api_key);
 
   spdlog::info("clients: {}", clients.asr->description());
   spdlog::info("clients: {}", clients.tts->description());

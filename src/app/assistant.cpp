@@ -19,6 +19,7 @@
 #include "agent/text_normalize.h"
 #include "agent/tools.h"
 #include "app/playback.h"
+#include "app/responder.h"
 #include "audio/wav.h"
 
 namespace hoodie::app {
@@ -81,7 +82,7 @@ void Assistant::stop() {
 }
 
 const char* Assistant::state_name() const {
-  switch (state_) {
+  switch (state_.load()) {
     case State::Idle: return "idle";
     case State::Listening: return "listening";
     case State::Thinking: return "thinking";
@@ -91,7 +92,7 @@ const char* Assistant::state_name() const {
 }
 
 void Assistant::set_state(State state) {
-  if (state_ == state) return;
+  if (state_.load() == state) return;
   spdlog::debug("state: {} -> {}", state_name(), [&] {
     switch (state) {
       case State::Idle: return "idle";
@@ -101,7 +102,7 @@ void Assistant::set_state(State state) {
     }
     return "?";
   }());
-  state_ = state;
+  state_.store(state);
 }
 
 void Assistant::on_endpoint(wake::Endpointer::Event event, std::size_t /*frame_index*/) {
@@ -173,7 +174,7 @@ void Assistant::process_block(const audio::AudioFrame& mono) {
   pcm16k_.clear();
   to_16k_->process(mono.samples.data(), mono.frames(), pcm16k_);
 
-  switch (state_) {
+  switch (state_.load()) {
     case State::Idle: {
       if (pcm16k_.empty()) break;
       const std::optional<float> score = wake_.process(pcm16k_.data(), pcm16k_.size());
@@ -285,43 +286,33 @@ void Assistant::respond() {
                          /*model=*/"", /*max_steps=*/6});
   agent::ToolContext tool_context;
   agent::Agent::Result result;
+
+  Responder responder(*clients_.tts, options_.out_file, options_.output_device);
+  responder.start(cancel_, [this] { set_state(State::Speaking); });
+
   try {
     const auto t0 = std::chrono::steady_clock::now();
-    result = agent.run(transcript, tool_context, cancel_);
+    result = agent.run(transcript, tool_context, cancel_,
+                       [&](const std::string& token) { responder.push_text(token); });
     spdlog::info("agent: {} step(s) ({:.2f} s)", result.steps, elapsed_seconds(t0));
   } catch (const std::exception& e) {
+    responder.abort();
     spdlog::error("agent failed: {}", e.what());
     reset_turn();
     return;
   }
 
   if (result.text.empty()) {
+    responder.abort();
     spdlog::warn("agent returned an empty reply");
     reset_turn();
     return;
   }
   spdlog::info("reply: {}", result.text);
 
-  set_state(State::Speaking);
-  try {
-    const auto t0 = std::chrono::steady_clock::now();
-    const std::string spoken = agent::normalize_for_tts(result.text);
-    audio::AudioFrame speech;
-    clients_.tts->synthesize(
-        spoken, cancel_,
-        [&](const audio::AudioFrame& chunk) {
-          if (speech.samples.empty()) {
-            speech.sample_rate = chunk.sample_rate;
-            speech.channels = chunk.channels;
-          }
-          speech.samples.insert(speech.samples.end(), chunk.samples.begin(), chunk.samples.end());
-        },
-        [] {});
-    spdlog::info("tts: {:.2f} s of audio ({:.2f} s)", speech.duration_seconds(),
-                 elapsed_seconds(t0));
-    play_or_write(speech, options_.out_file, options_.output_device);
-  } catch (const std::exception& e) {
-    spdlog::error("tts failed: {}", e.what());
+  responder.finish();
+  if (responder.failed()) {
+    spdlog::error("tts failed: {}", responder.error());
     reset_turn();
     return;
   }
@@ -363,7 +354,7 @@ int Assistant::run() {
            g_interrupted.load(std::memory_order_relaxed))) {
     const std::size_t got = ring_.read(scratch_.data(), scratch_.size());
     if (got == 0) {
-      if (state_ == State::Listening && !endpointer_.in_speech() &&
+      if (state_.load() == State::Listening && !endpointer_.in_speech() &&
           elapsed_seconds(listening_since_) > options_.listen_timeout_seconds) {
         if (utterance_.duration_seconds() >= 0.3) {
           // Safety net: the endpointer never produced an end we could honor, but
@@ -377,7 +368,7 @@ int Assistant::run() {
           reset_turn();
         }
       }
-      if (options_.idle_timeout_seconds > 0.0 && state_ == State::Idle &&
+      if (options_.idle_timeout_seconds > 0.0 && state_.load() == State::Idle &&
           elapsed_seconds(started) > options_.idle_timeout_seconds) {
         spdlog::info("idle timeout reached");
         break;
