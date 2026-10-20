@@ -271,9 +271,26 @@ void LiveAsrClient::worker_loop() {
 
   if (result.cancelled) return;
   if (!result.ok()) {
+    std::string detail;
+    if (result.status != 0) detail = "HTTP " + std::to_string(result.status);
+    if (!result.error.empty()) {
+      if (!detail.empty()) detail += ": ";
+      detail += result.error;
+    }
+    if (detail.empty()) detail = "request failed";
+    std::string body = result.body_string();
+    for (char& c : body) {
+      if (c == '\n' || c == '\r') c = ' ';
+    }
+    if (!body.empty()) {
+      detail += " - ";
+      detail += body.substr(0, 512);
+    }
     std::lock_guard<std::mutex> lock(mutex_);
-    error_ = std::make_exception_ptr(ApiError(
-        result.status, result.error.empty() ? "asr live request failed" : result.error));
+    error_ = std::make_exception_ptr(
+        ApiError(result.status,
+                 "asr live request failed at " + url_ + " (" + detail + ")",
+                 result.body_string()));
   }
 }
 

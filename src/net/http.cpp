@@ -22,6 +22,9 @@ void ensure_curl_initialized() {
 
 struct WriteContext {
   std::vector<uint8_t>* body = nullptr;
+  // When on_chunk is set, capture at most this many leading response bytes for
+  // diagnostics. 0 disables capture, so streaming audio is not accumulated.
+  std::size_t body_limit = 0;
   const HttpClient::ChunkCallback* on_chunk = nullptr;
   const util::CancelToken* cancel = nullptr;
 };
@@ -36,6 +39,12 @@ size_t write_callback(char* ptr, size_t size, size_t nmemb, void* userdata) {
   const std::size_t count = size * nmemb;
   if (ctx->cancel != nullptr && ctx->cancel->cancelled()) return 0;  // abort transfer
   if (ctx->on_chunk != nullptr) {
+    if (ctx->body != nullptr && ctx->body_limit > 0 && ctx->body->size() < ctx->body_limit) {
+      const std::size_t room = ctx->body_limit - ctx->body->size();
+      const std::size_t take = std::min(room, count);
+      const auto* bytes = reinterpret_cast<const uint8_t*>(ptr);
+      ctx->body->insert(ctx->body->end(), bytes, bytes + take);
+    }
     (*ctx->on_chunk)(reinterpret_cast<const uint8_t*>(ptr), count);
   } else if (ctx->body != nullptr) {
     const auto* bytes = reinterpret_cast<const uint8_t*>(ptr);
@@ -123,6 +132,7 @@ HttpResult HttpClient::post_duplex(const std::string& url, const Headers& header
 
   WriteContext write_ctx;
   write_ctx.body = &result.body;
+  write_ctx.body_limit = 4096;  // keep the error body, not the SSE stream
   write_ctx.on_chunk = &on_chunk;
   write_ctx.cancel = &cancel;
 
