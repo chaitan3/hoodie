@@ -39,9 +39,9 @@ struct HttpResult {
   std::string body_string() const { return std::string(body.begin(), body.end()); }
 };
 
-// Minimal synchronous libcurl wrapper. One instance is not thread-safe; create
-// one per thread. Supports in-memory bodies, multipart uploads, and streaming
-// response callbacks (used later for SSE / chunked audio).
+// Minimal synchronous libcurl wrapper. Each request creates its own CURL easy
+// handle, so one instance may be used concurrently. Supports in-memory bodies,
+// multipart uploads, streaming response callbacks, and full-duplex requests.
 class HttpClient {
  public:
   using ChunkCallback = std::function<void(const uint8_t* data, std::size_t size)>;

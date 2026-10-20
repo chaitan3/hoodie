@@ -341,7 +341,8 @@ void Assistant::dump_utterance() {
   const std::filesystem::path path =
       std::filesystem::path(options_.dump_utterance_dir) / name;
 
-  // Write exactly the bytes that will be POSTed to the ASR service.
+  // Save the captured utterance at the capture rate for inspection. ASR consumes
+  // the resampled 16 kHz stream; buffered ASR wraps that stream in a WAV at commit.
   const std::vector<uint8_t> wav = audio::encode_wav_pcm16(utterance_);
   std::ofstream out(path, std::ios::binary);
   if (!out) {

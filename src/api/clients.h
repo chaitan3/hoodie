@@ -16,9 +16,9 @@ struct ClientSet {
   std::unique_ptr<LlmClient> llm;
 };
 
-// Build the per-service clients from configuration. Streaming tiers are
-// selected when implemented; until then the buffered floor is used and the
-// fallback is logged (see MIGRATION.md §6.1).
+// Build the per-service clients from configuration. Each service selects its
+// streaming or buffered implementation from streaming.*_mode at startup; live
+// ASR also installs a buffered replay fallback. See ARCHITECTURE.md section 6.
 ClientSet make_clients(const Config& config, net::HttpClient& http);
 
 }  // namespace hoodie::api

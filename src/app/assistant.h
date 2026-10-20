@@ -52,8 +52,10 @@ struct AssistantOptions {
 // Silero VAD + the endpointer while buffering the utterance at the capture
 // rate; the finished utterance goes ASR -> agent -> TTS and is played back.
 //
-// Buffered clients only for now: ASR runs after the utterance ends, so a turn
-// is serial. Streaming adapters drop in behind the same client interfaces.
+// Clients are selected per service at startup (buffered or streaming). In live
+// ASR mode audio is pushed while Listening; the finished utterance goes through
+// ASR -> agent -> TTS. A turn is still serial: input is ignored during Thinking
+// and Speaking.
 class Assistant {
  public:
   Assistant(const Config& config, AssistantOptions options);
