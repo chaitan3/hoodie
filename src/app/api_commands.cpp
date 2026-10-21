@@ -19,7 +19,8 @@ namespace hoodie::app {
 namespace {
 
 constexpr const char* kDefaultSystemPrompt =
-    "You are a helpful assistant. Reply in one short sentence.";
+    "You are a helpful assistant. Answer in one sentence and expand any abbreviations or symbols "
+    "into words.";
 
 struct ApiContext {
   net::HttpClient http;

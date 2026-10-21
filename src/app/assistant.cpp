@@ -32,7 +32,8 @@ std::atomic<bool> g_interrupted{false};
 void handle_signal(int) { g_interrupted.store(true, std::memory_order_relaxed); }
 
 constexpr const char* kDefaultSystemPrompt =
-    "You are a helpful assistant. Reply in one short sentence.";
+    "You are a helpful assistant. Answer in one sentence and expand any abbreviations or symbols "
+    "into words.";
 constexpr auto kPollInterval = std::chrono::milliseconds(5);
 constexpr std::size_t kScratchSamples = 8192;  // interleaved capture samples
 

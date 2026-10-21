@@ -51,12 +51,34 @@ std::string get_weather_impl(net::HttpClient& http) {
   try {
     const json root = json::parse(result.body_string());
     const json& period = root.at("properties").at("periods").at(0);
-    const int temp_f = period.at("temperature").get<int>();
-    const int temp_c = static_cast<int>((temp_f - 32) * 5 / 9);
+    const int temperature = period.at("temperature").get<int>();
+    const std::string unit = period.value("temperatureUnit", "F");
+    const int temp_c = unit == "C"
+                           ? temperature
+                           : static_cast<int>((temperature - 32) * 5 / 9);
     std::string forecast = period.at("detailedForecast").get<std::string>();
-    const std::string f_str = std::to_string(temp_f);
-    if (const auto pos = forecast.find(f_str); pos != std::string::npos) {
-      forecast.replace(pos, f_str.size(), std::to_string(temp_c));
+
+    // NWS text carries the raw temperature without a unit. Replace that exact
+    // token with an explicitly labelled Celsius value so the model cannot
+    // mistake the converted number for Fahrenheit.
+    const std::string value = std::to_string(temperature);
+    const std::string celsius = std::to_string(temp_c) + " degrees Celsius";
+    bool replaced = false;
+    for (std::size_t pos = forecast.find(value); pos != std::string::npos;
+         pos = forecast.find(value, pos + 1)) {
+      const bool left_ok =
+          pos == 0 || !std::isdigit(static_cast<unsigned char>(forecast[pos - 1]));
+      const std::size_t end = pos + value.size();
+      const bool right_ok =
+          end == forecast.size() ||
+          !std::isdigit(static_cast<unsigned char>(forecast[end]));
+      if (!left_ok || !right_ok) continue;
+      forecast.replace(pos, value.size(), celsius);
+      replaced = true;
+      break;
+    }
+    if (!replaced) {
+      forecast = "The temperature is " + celsius + ". " + forecast;
     }
     return forecast;
   } catch (const std::exception& e) {
