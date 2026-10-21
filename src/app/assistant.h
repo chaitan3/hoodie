@@ -54,8 +54,9 @@ struct AssistantOptions {
 //
 // Clients are selected per service at startup (buffered or streaming). In live
 // ASR mode audio is pushed while Listening; the finished utterance goes through
-// ASR -> agent -> TTS. A turn is still serial: input is ignored during Thinking
-// and Speaking.
+// ASR -> agent -> TTS. A turn is still serial: no new turn starts while one is
+// in flight, though the wake detector's context is advanced during Listening,
+// Thinking, and Speaking so its stale windows cannot re-trigger after the reply.
 class Assistant {
  public:
   Assistant(const Config& config, AssistantOptions options);

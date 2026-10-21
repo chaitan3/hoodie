@@ -202,10 +202,10 @@ void Assistant::reset_turn() {
   utterance_ = audio::AudioFrame{};
   utterance_.sample_rate = capture_rate_;
   utterance_.channels = 1;
-  // Drop audio captured while we were busy (ASR/agent/TTS, including our own
-  // playback) so it is never fed back into the wake detector. The detector is
+  // Drop queued audio so it cannot be replayed after the turn. The detector is
   // deliberately NOT reset: re-seeding its windows would re-arm the startup
-  // gate - and its false positive - after every reply.
+  // gate after every reply. Its context is kept current by process_block() in
+  // the busy states, where scores are ignored.
   ring_.clear();
   vad_.reset();
   endpointer_.reset();
@@ -271,17 +271,21 @@ void Assistant::process_block(const audio::AudioFrame& mono) {
   pcm16k_.clear();
   to_16k_->process(mono.samples.data(), mono.frames(), pcm16k_);
 
+  // Keep the wake detector's streaming windows current in every state. Scores
+  // are only evaluated in Idle. If the detector is simply frozen during a turn,
+  // its windows still contain the wake word when we return to Idle; as the old
+  // window slides out it can dip below the release threshold and then score high
+  // again, firing spuriously right after the reply.
+  const std::optional<float> wake_score =
+      pcm16k_.empty() ? std::nullopt : wake_.process(pcm16k_.data(), pcm16k_.size());
+
   switch (state_.load()) {
     case State::Idle: {
-      if (pcm16k_.empty()) break;
-      const std::optional<float> score = wake_.process(pcm16k_.data(), pcm16k_.size());
-      if (score.has_value()) {
-        const float value = *score;
+      if (wake_score.has_value()) {
+        const float value = *wake_score;
         const float threshold = wake_.threshold();
-        // Trigger on a rising edge only. Because the detector is not reset
-        // between turns, its windows still hold the wake word for ~1 s after a
-        // reply and would otherwise re-fire immediately; re-arm once the score
-        // has fallen well below the threshold.
+        // Trigger on a rising edge only. Re-arm once the score has fallen well
+        // below the threshold, so a single lingering high frame cannot re-fire.
         if (!wake_high_ && value >= threshold) {
           wake_high_ = true;
           spdlog::info("wake word '{}' detected (score {:.2f})", wake_.keyword(), value);
@@ -322,7 +326,9 @@ void Assistant::process_block(const audio::AudioFrame& mono) {
     }
     case State::Thinking:
     case State::Speaking:
-      break;  // not consuming input while a response is in flight
+      // No turn is consuming this audio, but wake_score above has already
+      // advanced the detector's context so it is current when we return to Idle.
+      break;
   }
 }
 

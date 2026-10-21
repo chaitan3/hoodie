@@ -20,9 +20,10 @@ the same binary can run against plain request/response servers.
   if the final transcript differs.
 - Provides hardware-free WAV replay and diagnostics for every stage.
 
-Barge-in and acoustic echo cancellation are not implemented yet. While the
-assistant is thinking or speaking, microphone audio is deliberately discarded
-rather than fed back into the wake detector.
+Barge-in and acoustic echo cancellation are not implemented yet. No new turn
+starts while the assistant is thinking or speaking; the wake detector still
+consumes those blocks to keep its context current, but its scores are ignored and
+queued audio is cleared before returning to idle.
 
 ## Requirements
 

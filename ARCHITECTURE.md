@@ -114,7 +114,10 @@ The state enum is `Idle`, `Listening`, `Thinking`, and `Speaking`.
 5. **Reset.** The turn stops ASR and speculation, clears the capture ring and
    utterance, resets VAD/endpointer, and returns to `Idle`. The wake detector is
    intentionally not reset: re-seeding its windows would re-arm the startup
-   gate and its possible false positive after every turn.
+   gate after every turn. Instead, `process_block()` keeps feeding it during
+   Listening/Thinking/Speaking while ignoring its scores. That flushes the old
+   wake word out of the keyword window, so it cannot re-trigger as the stale
+   context slides out after the reply.
 
 ### Timing gates
 
@@ -361,11 +364,16 @@ set a global interrupted flag. This keeps shutdown and failed turns from leaving
 a request or player thread running.
 
 The current voice loop is **half-duplex**. Capture keeps running while the
-assistant thinks and speaks, but `process_block()` ignores input in `Thinking`
-and `Speaking`, and `reset_turn()` clears the ring. This prevents the assistant's
-own output from waking it. True barge-in needs echo cancellation first; otherwise
-the microphone would hear the assistant and interrupt itself. The `CancelToken`
-and player/HTTP stop paths are the foundation for that future work.
+assistant thinks and speaks, but no new turn starts in `Thinking` or `Speaking`.
+The wake detector still consumes those blocks so its streaming context stays
+current, but its scores are ignored; `reset_turn()` then clears the queued audio
+before returning to `Idle`. Without that context advance, the frozen keyword
+window still contains the original wake word and can dip and rise again as it
+slides out, firing right after the reply. The assistant's own output cannot
+start a new turn through the ignored scores, but true barge-in still needs echo
+cancellation: otherwise the microphone hears the assistant and interrupts it.
+The `CancelToken` and player/HTTP stop paths are the foundation for that future
+work.
 
 ## 11. Configuration
 
