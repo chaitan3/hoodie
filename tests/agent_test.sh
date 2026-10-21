@@ -2,7 +2,8 @@
 # Agent + tools test: exercises the tool-calling loop against the mock server.
 # The mock returns a get_time tool call on the first round and a final answer
 # once a tool result is present, so a passing run proves the loop executed the
-# tool and fed the result back.
+# tool and fed the result back. --agent is print-only, so --out must not write
+# audio.
 #
 #   tests/agent_test.sh [build-dir]
 set -euo pipefail
@@ -41,8 +42,8 @@ export HOODIE_LOG_LEVEL="warn"
 OUT_WAV="$(mktemp --suffix=.wav)"
 out="$("$BIN" -c "$CONFIG" --agent "what time is it?" --out "$OUT_WAV")"
 echo "$out" | grep -q "mock final reply" || fail "agent reply: '$out'"
-[[ -s "$OUT_WAV" ]] || fail "agent did not synthesize speech"
-pass "agent tool loop ($out)"
+[[ ! -s "$OUT_WAV" ]] || fail "--agent unexpectedly synthesized speech"
+pass "agent tool loop, print-only ($out)"
 
 rm -f "$OUT_WAV"
 echo "agent: PASSED"

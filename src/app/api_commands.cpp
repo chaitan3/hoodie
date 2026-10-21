@@ -69,12 +69,11 @@ int run_agent(const Config& config, const ApiCommandOptions& options, const std:
   std::cout << result.text << "\n";
   spdlog::info("agent: completed in {} step(s)", result.steps);
 
-  const audio::AudioFrame speech =
-      api::synthesize_blocking(*ctx.clients.tts, agent::normalize_for_tts(result.text));
-  play_or_write(speech, options.out_file, options.output_device);
-
+  if (!options.out_file.empty()) {
+    spdlog::warn("--out is ignored with --agent; use --roundtrip for agent audio");
+  }
   if (tool_context.music.has_value()) {
-    play_music_request(*tool_context.music, options.out_file, options.output_device);
+    spdlog::warn("agent: music playback is disabled in print-only mode");
   }
   return 0;
 }

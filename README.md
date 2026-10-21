@@ -230,11 +230,14 @@ run the file is overwritten each turn, so use `--once` when inspecting it.
 ./build/hoodie -c config/hoodie.json --transcribe /tmp/mic.wav
 ./build/hoodie -c config/hoodie.json --ask "Say hello in five words"
 ./build/hoodie -c config/hoodie.json --say "Hello from hoodie" --out /tmp/tts.wav
-./build/hoodie -c config/hoodie.json --agent "What time is it?" --out /tmp/agent.wav
+./build/hoodie -c config/hoodie.json --agent "What time is it?"
 ./build/hoodie -c config/hoodie.json --roundtrip /tmp/mic.wav --out /tmp/reply.wav
 ```
 
-`--agent` and `--say` play audio by default; add `--out` for headless use.
+`--agent` is print-only: it runs the tool loop and prints the final reply without
+synthesizing speech or playing music. `--out` is ignored with `--agent`. Use
+`--roundtrip` when you want the full ASR -> agent -> TTS audio path.
+`--say` plays audio by default; add `--out` for headless use.
 `--roundtrip` prints the transcript and reply and then speaks the reply.
 `--tool get_time`, `--tool get_weather`, `--tool 'play_music' --args '{"phrase":"..."}'`,
 and `--norm "text"` are useful for testing individual pieces.
@@ -249,7 +252,7 @@ and `--norm "text"` are useful for testing individual pieces.
 | `--listen` | Run the live microphone loop. |
 | `--once` | Stop after one completed turn. |
 | `--listen-wav <file>` | Replay a WAV through the voice state machine. |
-| `--out <file>` | Write synthesized reply audio to a WAV instead of playing it. |
+| `--out <file>` | Write synthesized reply audio to a WAV instead of playing it (for `--say`, `--roundtrip`, and the listen loop; ignored by `--agent`). |
 | `--save-utterances <dir>` | Save each captured utterance as a WAV for inspection. |
 | `--min-utterance-ms <n>` | Ignore end-of-speech before `n` ms (default from config: 1500). |
 | `--wav-block-frames <n>` | Block size used by `--listen-wav`; useful for edge-case tests. |
@@ -267,7 +270,7 @@ and `--norm "text"` are useful for testing individual pieces.
 |---|---|
 | `--transcribe <file>` | Send one audio file to ASR and print the text. |
 | `--ask <text>` | One plain LLM request, no tools. Prints the reply. |
-| `--agent <text>` | Run the tool-calling agent and speak the reply (or write `--out`). |
+| `--agent <text>` | Run the tool-calling agent and print the final reply. No TTS or playback. |
 | `--say <text>` | Synthesize text and play it (or write `--out`). |
 | `--roundtrip <file>` | ASR -> agent -> TTS on one audio file. |
 | `--system <text>` | Override the default system prompt for this run. |
@@ -421,7 +424,7 @@ Use the one-shot commands before debugging the live loop:
 ./build/hoodie -c config/hoodie.json --transcribe /tmp/mic.wav
 ./build/hoodie -c config/hoodie.json --ask "ping"
 ./build/hoodie -c config/hoodie.json --say "hello" --out /tmp/tts.wav
-./build/hoodie -c config/hoodie.json --agent "what time is it?" --out /tmp/agent.wav
+./build/hoodie -c config/hoodie.json --agent "what time is it?"
 ./build/hoodie -c config/hoodie.json --roundtrip /tmp/mic.wav --out /tmp/reply.wav
 ```
 

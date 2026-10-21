@@ -21,7 +21,8 @@ int run_transcribe(const Config& config, const ApiCommandOptions& options,
 // Send a text prompt to the LLM (no tools) and print the reply to stdout.
 int run_ask(const Config& config, const ApiCommandOptions& options, const std::string& text);
 
-// Run the tool-calling agent, speak the reply, and play any requested music.
+// Run the tool-calling agent and print the final reply. Intentionally does not
+// synthesize speech or play music; use --roundtrip for the audio pipeline.
 int run_agent(const Config& config, const ApiCommandOptions& options, const std::string& text);
 
 // Synthesise speech, then play it or write it to options.out_file.
