@@ -16,7 +16,7 @@ struct WakeWordConfig {
   std::string embedding_model = "models/embedding_model.onnx";
   std::string keyword_model = "models/alexa_v0.1.onnx";
   std::string keyword = "alexa";
-  float threshold = 0.5f;
+  float threshold = 0.75f;
   int warmup_frames = 5;  // predictions forced to zero for the first N 80 ms frames
   // Withhold scores until the mel/embedding/keyword windows contain only real
   // audio. Startup windows are seeded with synthetic padding, which can score a
@@ -75,7 +75,7 @@ class WakeWordDetector {
   std::size_t real_feature_frames_ = 0;
 
   std::string keyword_;
-  float threshold_ = 0.5f;
+  float threshold_ = 0.75f;
   int warmup_frames_ = 5;
   bool require_real_context_ = true;
 };

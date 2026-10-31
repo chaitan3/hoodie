@@ -20,7 +20,7 @@
   },
   "wakeword": {
     "keyword": "alexa",
-    "threshold": 0.5,
+    "threshold": 0.75,
     "melspectrogram_model": "models/melspectrogram.onnx",
     "embedding_model": "models/embedding_model.onnx",
     "keyword_model": "models/alexa_v0.1.onnx",
