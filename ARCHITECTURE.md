@@ -442,6 +442,9 @@ keeps each turn's transport behavior predictable.
 - Logs are structured enough to isolate a stage: client selection at startup,
   wake score, state transitions at debug level, utterance statistics, ASR
   timing, transcript, agent step count, reply, and speculation outcome.
+- `--save-wake-events <dir>` optionally records accepted wake detections as a
+  16 kHz WAV with pre-roll/post-roll and a JSON score trace. A background writer
+  keeps disk I/O off the audio loop; the recorder is disabled unless requested.
 - The config summary prints hosts and models with redacted keys.
 
 ## 14. Testing strategy
@@ -458,7 +461,8 @@ The core is tested without a microphone:
   live ASR, live-to-buffered fallback, and a dead server.
 - `tests/listen_test.sh` replays generated WAVs through the full state machine:
   a normal turn, a pause after wake, streaming services, live ASR, matched and
-  mismatched speculation, tiny input blocks, and silence rejection.
+  mismatched speculation, tiny input blocks, silence rejection, and wake-event
+  recording.
 
 The mock server (`tests/mock_openai_server.py`) implements the relevant
 OpenAI-compatible endpoints plus a scripted live ASR stream and a `--fail-live`

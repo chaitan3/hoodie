@@ -79,7 +79,7 @@ export HOODIE_LOG_LEVEL="info"
 
 # --- One full turn -----------------------------------------------------------
 if ! "$BIN" -c "$CONFIG" --listen-wav "$WORK/listen.wav" --out "$WORK/reply.wav" \
-    >"$WORK/run.log" 2>&1; then
+    --save-wake-events "$WORK/wake-events" >"$WORK/run.log" 2>&1; then
   fail "listen run failed: $(tail -1 "$WORK/run.log")"
 fi
 
@@ -90,6 +90,23 @@ grep -q "reply: mock final reply" "$WORK/run.log" || fail "missing agent reply"
 size=$(stat -c%s "$WORK/reply.wav")
 [[ "$size" -gt 10000 ]] || fail "reply audio too small: $size bytes"
 pass "wake -> ASR -> agent -> TTS (reply $size bytes)"
+
+event_json=$(find "$WORK/wake-events" -name event.json -print -quit)
+[[ -n "$event_json" ]] || fail "wake event JSON not written"
+[[ -s "$(dirname "$event_json")/audio.wav" ]] || fail "wake event audio not written"
+python3 - "$event_json" <<'PY'
+import json
+import sys
+
+event = json.load(open(sys.argv[1]))
+assert event["schema"] == 1
+assert event["accepted"] is True
+assert event["wakeword"]["keyword"] == "alexa"
+assert event["audio"]["sample_rate"] == 16000
+assert event["audio"]["samples"] > 48000
+assert len(event["scores"]) > 2
+PY
+pass "wake event audio and metadata saved"
 
 # --- A pause after the wake word must not truncate the command ---------------
 if ! "$BIN" -c "$CONFIG" --listen-wav "$WORK/listen_pause.wav" --out "$WORK/pause_reply.wav" \

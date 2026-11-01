@@ -254,6 +254,7 @@ and `--norm "text"` are useful for testing individual pieces.
 | `--listen-wav <file>` | Replay a WAV through the voice state machine. |
 | `--out <file>` | Write synthesized reply audio to a WAV instead of playing it (for `--say`, `--roundtrip`, and the listen loop; ignored by `--agent`). |
 | `--save-utterances <dir>` | Save each captured utterance as a WAV for inspection. |
+| `--save-wake-events <dir>` | Save accepted wake detections with pre-roll/post-roll audio and metadata. |
 | `--min-utterance-ms <n>` | Ignore end-of-speech before `n` ms (default from config: 1500). |
 | `--wav-block-frames <n>` | Block size used by `--listen-wav`; useful for edge-case tests. |
 | `--input-device <d>` | Override `audio.input_device` for this run. |
@@ -439,6 +440,28 @@ Each turn writes `utterance-0001.wav`, `utterance-0002.wav`, and so on. The WAV
 is the captured utterance at the capture rate. Listen to it, feed it back
 through `--transcribe`, or run `--wakeword`/`--vad`/`--endpoint` on it to find
 out whether the problem is capture, detection, or ASR.
+
+### Inspect wake detections
+
+`--save-wake-events` is opt-in and records accepted wake detections, including
+the audio that triggered the detector:
+
+```bash
+./build/hoodie -c config/hoodie.json --listen \
+  --save-wake-events /tmp/wake-events
+```
+
+Each detection creates a directory such as
+`/tmp/wake-events/wake-20261101T214500Z-1/` containing:
+
+- `audio.wav` — 16 kHz mono audio, with 3 seconds of pre-roll and up to 5
+  seconds of post-roll
+- `event.json` — trigger score, gate state, configuration, model paths,
+  capture metadata, and the per-frame score trace
+
+The newest 100 event directories are retained. Use this audio to replay the
+detector with `--wakeword`, to distinguish a literal “Alexa” from a phonetic
+false positive, and to collect hard negatives for future tuning.
 
 The utterance log's `peak` and `rms` distinguish silence/clipping from a
 recognition problem. A nonzero `ring_dropped` means the host could not keep up

@@ -19,6 +19,7 @@ add_executable(hoodie
   src/app/config.cpp
   src/app/api_commands.cpp
   src/app/assistant.cpp
+  src/app/wake_event_recorder.cpp
   src/app/playback.cpp
   src/app/responder.cpp
   src/app/speculator.cpp

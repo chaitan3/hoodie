@@ -22,6 +22,7 @@
 #include "app/playback.h"
 #include "app/responder.h"
 #include "app/speculator.h"
+#include "app/wake_event_recorder.h"
 #include "audio/wav.h"
 
 namespace hoodie::app {
@@ -108,7 +109,25 @@ Assistant::Assistant(const Config& config, AssistantOptions options)
                     on_endpoint(event, index);
                   }),
       ring_(1u << 16),
-      scratch_(kScratchSamples) {}
+      scratch_(kScratchSamples) {
+  if (!options_.save_wake_events_dir.empty()) {
+    WakeEventRecorderOptions recorder_options;
+    recorder_options.directory = options_.save_wake_events_dir;
+    recorder_options.keyword = config_.wakeword.keyword;
+    recorder_options.threshold = static_cast<float>(config_.wakeword.threshold);
+    recorder_options.min_consecutive_frames = config_.wakeword.min_consecutive_frames;
+    recorder_options.warmup_frames = config_.wakeword.warmup_frames;
+    recorder_options.require_real_context = config_.wakeword.require_real_context;
+    recorder_options.melspectrogram_model = config_.wakeword.melspectrogram_model;
+    recorder_options.embedding_model = config_.wakeword.embedding_model;
+    recorder_options.keyword_model = config_.wakeword.keyword_model;
+    recorder_options.input_device =
+        options_.input_device.empty() ? config_.audio.input_device : options_.input_device;
+    recorder_options.capture_sample_rate = config_.audio.capture_sample_rate;
+    recorder_options.capture_channels = 1;
+    wake_events_ = std::make_unique<WakeEventRecorder>(std::move(recorder_options));
+  }
+}
 
 Assistant::~Assistant() {
   stop_speculation();
@@ -285,9 +304,15 @@ void Assistant::process_block(const audio::AudioFrame& mono) {
   float wake_trigger_score = 0.0f;
   const State state_before_wake = state_.load(std::memory_order_relaxed);
   if (!pcm16k_.empty()) {
+    if (wake_events_) wake_events_->push_audio(pcm16k_.data(), pcm16k_.size());
     wake_.process(pcm16k_.data(), pcm16k_.size(), [&](float score) {
       const bool gate_fired = wake_gate_.update(score);
+      if (wake_events_) {
+        wake_events_->push_score(score, wake_gate_.armed(),
+                                 wake_gate_.consecutive_frames());
+      }
       if (gate_fired && state_before_wake == State::Idle) {
+        if (wake_events_) wake_events_->on_trigger(score);
         wake_triggered = true;
         wake_trigger_score = score;
       }
@@ -498,6 +523,9 @@ int Assistant::run() {
   });
   capture_rate_ = capture_->sample_rate();
   capture_channels_ = capture_->channels();
+  if (wake_events_) {
+    wake_events_->set_capture_info(capture_rate_, capture_channels_, capture_->device_name());
+  }
   to_16k_ = std::make_unique<audio::Resampler>(capture_rate_, audio::kSampleRate16k, 1);
 
   spdlog::info("listening for '{}' (input '{}', {} Hz, {} ch) - Ctrl-C to stop", wake_.keyword(),
@@ -554,6 +582,9 @@ int Assistant::run_file(const std::string& wav_path) {
   const audio::AudioFrame mono = audio::to_mono(raw);
   capture_rate_ = mono.sample_rate > 0 ? mono.sample_rate : audio::kSampleRate16k;
   capture_channels_ = 1;
+  if (wake_events_) {
+    wake_events_->set_capture_info(capture_rate_, capture_channels_, "wav:" + wav_path);
+  }
   to_16k_ = std::make_unique<audio::Resampler>(capture_rate_, audio::kSampleRate16k, 1);
 
   spdlog::info("replaying '{}' ({} Hz, {:.2f} s) through the state machine", wav_path,

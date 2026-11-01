@@ -25,6 +25,7 @@
 namespace hoodie::app {
 
 class Speculator;
+class WakeEventRecorder;
 
 struct AssistantOptions {
   std::string input_device;    // empty = config.audio.input_device
@@ -32,6 +33,7 @@ struct AssistantOptions {
   std::string system_prompt;
   std::string out_file;        // when set, write the reply audio here instead of playing
   std::string dump_utterance_dir;  // when set, save each utterance WAV sent to ASR
+  std::string save_wake_events_dir;  // when set, save accepted wake detections
   bool once = false;           // handle a single turn, then return
   double idle_timeout_seconds = 0.0;    // 0 = wait forever for the wake word
   double listen_timeout_seconds = 8.0;  // max silence after wake before giving up
@@ -100,6 +102,7 @@ class Assistant {
 
   wake::WakeWordDetector wake_;
   wake::WakeWordGate wake_gate_;
+  std::unique_ptr<WakeEventRecorder> wake_events_;
   wake::SileroVad vad_;
   wake::Endpointer endpointer_;
 
