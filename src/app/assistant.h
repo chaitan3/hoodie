@@ -20,6 +20,7 @@
 #include "wake/endpointer.h"
 #include "wake/vad.h"
 #include "wake/wakeword.h"
+#include "wake/wakeword_gate.h"
 
 namespace hoodie::app {
 
@@ -98,6 +99,7 @@ class Assistant {
   api::ClientSet clients_;
 
   wake::WakeWordDetector wake_;
+  wake::WakeWordGate wake_gate_;
   wake::SileroVad vad_;
   wake::Endpointer endpointer_;
 
@@ -125,7 +127,6 @@ class Assistant {
 
   std::atomic<State> state_{State::Idle};
   bool utterance_ready_ = false;
-  bool wake_high_ = false;  // rising-edge guard so a stale context does not re-trigger
   int utterance_counter_ = 0;
   std::chrono::steady_clock::time_point listening_since_{};
   std::chrono::system_clock::time_point utterance_started_at_{};

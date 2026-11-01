@@ -117,6 +117,8 @@ Config Config::load(const std::string& path) {
 
   cfg.wakeword.keyword = get_string(wake, "keyword", cfg.wakeword.keyword);
   cfg.wakeword.threshold = get_double(wake, "threshold", cfg.wakeword.threshold);
+  cfg.wakeword.min_consecutive_frames =
+      get_int(wake, "min_consecutive_frames", cfg.wakeword.min_consecutive_frames);
   cfg.wakeword.melspectrogram_model =
       get_string(wake, "melspectrogram_model", cfg.wakeword.melspectrogram_model);
   cfg.wakeword.embedding_model =
@@ -158,6 +160,9 @@ Config Config::load(const std::string& path) {
   }
   if (cfg.server.llm_base().empty()) {
     throw std::runtime_error("config: server.base_url or server.llm_base_url must not be empty");
+  }
+  if (cfg.wakeword.min_consecutive_frames < 1) {
+    throw std::runtime_error("config: wakeword.min_consecutive_frames must be at least 1");
   }
   if (cfg.audio.capture_sample_rate <= 0) {
     throw std::runtime_error("config: audio.capture_sample_rate must be positive");
@@ -234,6 +239,7 @@ std::string Config::summary() const {
       << "  streaming.llm_mode    = " << streaming.llm_mode << "\n"
       << "  wakeword.keyword      = " << wakeword.keyword
       << "  (threshold=" << wakeword.threshold
+      << ", frames=" << wakeword.min_consecutive_frames
       << ", gate=" << (wakeword.require_real_context ? "on" : "off") << ")\n"
       << "  audio.input_device    = "
       << (audio.input_device.empty() ? "<default>" : audio.input_device) << "\n"

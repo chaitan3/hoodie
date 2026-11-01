@@ -24,6 +24,7 @@
 #include "audio/ring_buffer.h"
 #include "audio/wav.h"
 #include "util/logging.h"
+#include "wake/wakeword_gate.h"
 
 namespace {
 
@@ -416,6 +417,22 @@ int run_selftest() {
     check(b == "See docs now", "normalize: markdown link");
     check(hoodie::agent::number_to_words(1234LL) == "one thousand two hundred thirty four",
           "normalize: integer to words");
+  }
+
+  // 7. Wake-word consecutive-frame gate.
+  {
+    hoodie::wake::WakeWordGate gate(
+        hoodie::wake::WakeWordGateOptions{0.75f, /*min_consecutive_frames=*/2, 0.5f});
+    check(!gate.update(0.80f), "wake gate: first high frame does not trigger");
+    check(gate.update(0.90f), "wake gate: second high frame triggers");
+    check(!gate.update(0.99f), "wake gate: latched after trigger");
+    check(!gate.update(0.30f) && gate.armed(), "wake gate: re-arms below release");
+    check(!gate.update(0.80f), "wake gate: count starts over after re-arm");
+    check(gate.update(0.80f), "wake gate: triggers again after re-arm");
+    gate.reset();
+    gate.update(0.90f);
+    check(!gate.update(0.50f) && !gate.update(0.90f),
+          "wake gate: sub-threshold frame breaks the run");
   }
 
   if (failures == 0) {

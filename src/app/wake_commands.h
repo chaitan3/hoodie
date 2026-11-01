@@ -7,8 +7,9 @@
 namespace hoodie::app {
 
 // Run the wake-word detector over a local audio file and print a summary to
-// stdout, e.g. "alexa: max=0.93 at=1.28s detected=yes". `threshold_override`
-// <= 0 uses the configured threshold. Returns 0 regardless of detection.
+// stdout, e.g. "alexa: max=0.93 at=1.28s detected=yes". Detection includes the
+// configured consecutive-frame gate. `threshold_override` <= 0 uses the
+// configured threshold. Returns 0 regardless of detection.
 int run_wakeword_check(const Config& config, const std::string& audio_file,
                        float threshold_override);
 

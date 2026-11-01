@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -35,7 +36,13 @@ class WakeWordDetector {
 
   // Feed 16 kHz mono int16 samples. Returns the keyword score when one or more
   // complete 80 ms frames were processed, otherwise std::nullopt.
+  //
+  // The overload with a callback reports every completed 80 ms frame. A capture
+  // block can contain several frames, so callers that need per-frame trigger
+  // logic (such as the consecutive-frame gate) must use the callback overload.
   std::optional<float> process(const int16_t* samples, std::size_t frames);
+  std::optional<float> process(const int16_t* samples, std::size_t frames,
+                               const std::function<void(float)>& on_score);
 
   // Process a whole buffer and return the maximum score seen.
   float process_all(const int16_t* samples, std::size_t frames);

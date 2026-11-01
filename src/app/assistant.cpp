@@ -99,6 +99,9 @@ Assistant::Assistant(const Config& config, AssistantOptions options)
       options_(std::move(options)),
       clients_(api::make_clients(config, http_)),
       wake_(make_wake_config(config)),
+      wake_gate_(wake::WakeWordGateOptions{
+          static_cast<float>(config.wakeword.threshold),
+          config.wakeword.min_consecutive_frames}),
       vad_(config.wakeword.vad_model, /*intra_op_threads=*/1),
       endpointer_(wake::Endpointer::Options{},
                   [this](wake::Endpointer::Event event, std::size_t index) {
@@ -272,28 +275,32 @@ void Assistant::process_block(const audio::AudioFrame& mono) {
   pcm16k_.clear();
   to_16k_->process(mono.samples.data(), mono.frames(), pcm16k_);
 
-  // Keep the wake detector's streaming windows current in every state. Scores
-  // are only evaluated in Idle. If the detector is simply frozen during a turn,
-  // its windows still contain the wake word when we return to Idle; as the old
-  // window slides out it can dip below the release threshold and then score high
-  // again, firing spuriously right after the reply.
-  const std::optional<float> wake_score =
-      pcm16k_.empty() ? std::nullopt : wake_.process(pcm16k_.data(), pcm16k_.size());
+  // Keep the wake detector's streaming windows current in every state. The
+  // detector may return several scores per capture block, so advance the gate
+  // for each frame and only accept a trigger while Idle. If the detector were
+  // frozen during a turn, its windows would still contain the wake word when we
+  // return to Idle; as the old window slides out it can dip below the release
+  // threshold and then score high again, firing spuriously right after the reply.
+  bool wake_triggered = false;
+  float wake_trigger_score = 0.0f;
+  const State state_before_wake = state_.load(std::memory_order_relaxed);
+  if (!pcm16k_.empty()) {
+    wake_.process(pcm16k_.data(), pcm16k_.size(), [&](float score) {
+      const bool gate_fired = wake_gate_.update(score);
+      if (gate_fired && state_before_wake == State::Idle) {
+        wake_triggered = true;
+        wake_trigger_score = score;
+      }
+    });
+  }
 
   switch (state_.load()) {
     case State::Idle: {
-      if (wake_score.has_value()) {
-        const float value = *wake_score;
-        const float threshold = wake_.threshold();
-        // Trigger on a rising edge only. Re-arm once the score has fallen well
-        // below the threshold, so a single lingering high frame cannot re-fire.
-        if (!wake_high_ && value >= threshold) {
-          wake_high_ = true;
-          spdlog::info("wake word '{}' detected (score {:.2f})", wake_.keyword(), value);
-          enter_listening();
-        } else if (wake_high_ && value < threshold * 0.5f) {
-          wake_high_ = false;
-        }
+      if (wake_triggered) {
+        spdlog::info("wake word '{}' detected (score {:.2f}, {} frames)",
+                     wake_.keyword(), wake_trigger_score,
+                     wake_gate_.min_consecutive_frames());
+        enter_listening();
       }
       break;
     }

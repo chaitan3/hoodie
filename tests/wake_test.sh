@@ -53,6 +53,16 @@ out="$("$BIN" -c "$CONFIG" --wakeword "$DATA/wake_stream.wav")"
 echo "$out" | grep -q "detected=yes" || fail "wake word not detected: $out"
 pass "wake word detected ($out)"
 
+# The live loop requires consecutive high frames. The fixture has two, so a
+# three-frame policy must report the raw score but reject the trigger.
+THREE_FRAME_CONFIG="$(mktemp --suffix=.json)"
+sed 's/"min_consecutive_frames": 2/"min_consecutive_frames": 3/' "$CONFIG" > "$THREE_FRAME_CONFIG"
+out="$("$BIN" -c "$THREE_FRAME_CONFIG" --wakeword "$DATA/wake_stream.wav")"
+rm -f "$THREE_FRAME_CONFIG"
+echo "$out" | grep -q "max=1" || fail "three-frame gate lost the raw score: $out"
+echo "$out" | grep -q "detected=no" || fail "three-frame gate accepted a two-frame wake: $out"
+pass "consecutive-frame gate enforced ($out)"
+
 out="$("$BIN" -c "$CONFIG" --wakeword "$DATA/silence.wav")"
 echo "$out" | grep -q "detected=no" || fail "silence false positive: $out"
 pass "silence rejected ($out)"

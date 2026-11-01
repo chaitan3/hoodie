@@ -94,11 +94,13 @@ The state enum is `Idle`, `Listening`, `Thinking`, and `Speaking`.
 
 1. **Idle.** The capture callback writes interleaved PCM into a lock-free SPSC
    ring. The main loop drains it, downmixes to mono, resamples to 16 kHz, and
-   feeds 1280-sample (80 ms) blocks to openWakeWord. A rising-edge score above
-   the threshold enters `Listening`. The detector is not reset between turns;
-   after a reply its old windows still contain the wake word, so a hysteresis
-   release (`score < threshold * 0.5`) and the rising-edge guard prevent an
-   immediate re-trigger.
+   feeds 1280-sample (80 ms) blocks to openWakeWord. Every frame is passed
+   through a consecutive-frame gate, so a single high-scoring transient cannot
+   enter `Listening`; the default is two frames. The detector is not reset
+   between turns; after a reply its old windows still contain the wake word, so
+   a hysteresis release (`score < threshold * 0.5`) and the gate's latch prevent
+   an immediate re-trigger. Gate state is advanced in every state, but triggers
+   are accepted only in Idle.
 2. **Listening.** The same 16 kHz stream feeds Silero VAD in 640-sample (40 ms)
    frames and the endpointer. The captured audio is also appended to the
    utterance buffer at the capture rate. With live ASR, every 16 kHz block is
@@ -383,7 +385,7 @@ The config is JSON. The top-level blocks are:
 |---|---|
 | `server` | Base URLs, default/per-service API keys, model IDs, TTS PCM format, LLM prompt cache. |
 | `streaming` | Only `asr_mode`, `tts_mode`, `llm_mode`. |
-| `wakeword` | Keyword, threshold, ONNX model paths, warm-up, real-context gate. |
+| `wakeword` | Keyword, threshold, consecutive-frame gate, ONNX model paths, warm-up, real-context gate. |
 | `audio` | Input/output device and capture sample rate. |
 | `assistant` | Minimum utterance, listen timeout, speculation tuning. |
 
@@ -423,7 +425,7 @@ keeps each turn's transport behavior predictable.
 | Sentence-level TTS pipelining | Starts audio before the full LLM reply; preserves sentence order with one worker. | Time-to-first-audio is bounded by the first sentence, not the first acoustic frame. |
 | Speculation is opt-in and match-checked | Can hide some ASR finalization latency without risking wrong tools/audio. | Extra LLM work; only useful with live ASR partials. |
 | 16 kHz wake/VAD/ASR, capture at device rate | Keeps detection and ASR bandwidth/compute low while preserving a clean capture for buffered ASR and diagnostics. | Two resampling stages and careful stateful resampler handling. |
-| Wake real-context gate and minimum utterance | Both address observed startup/tail false positives rather than papering over them with a higher threshold. | Adds a short startup delay and requires lead-in audio in replay fixtures. |
+| Wake real-context gate, consecutive-frame gate, and minimum utterance | These address observed startup/tail and transient false positives rather than papering over them with a higher threshold. | Adds a short startup delay and one 80 ms frame of trigger latency; replay fixtures need lead-in audio. |
 | JSON config with derived paths | One source of truth for hosts/keys/models; no duplicated endpoint settings. | Changing a server's protocol requires a code change, not just a config edit. |
 | Shell test suites + mock server | Tests run on the target and exercise the real HTTP/audio state machine without a live model server. | Not integrated with CTest; needs Python/curl and free ports. |
 

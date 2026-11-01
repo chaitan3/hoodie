@@ -282,7 +282,7 @@ and `--norm "text"` are useful for testing individual pieces.
 
 | Flag | Meaning |
 |---|---|
-| `--wakeword <file>` | Run the wake-word detector over an audio file and print the maximum score. |
+| `--wakeword <file>` | Run the wake-word detector over an audio file and print the maximum score and gated detection result. |
 | `--vad <file>` | Run Silero VAD over an audio file. |
 | `--endpoint <file>` | Run VAD + endpointer and print speech segments. |
 | `--threshold <x>` | Override the wake/VAD detection threshold (`0..1`). |
@@ -492,7 +492,7 @@ changing audio, transport, or state-machine code.
 | Device rejects the configured rate/channels | Change `audio.capture_sample_rate` or use `--input-device`/`--output-device`. |
 | Device busy / `Pa_OpenStream failed` | Another process (PipeWire, PulseAudio, browser) holds the device. Stop it or choose another device. |
 | Wake word never fires | Check `--wakeword` on a recording; lower `wakeword.threshold` slightly; verify the correct input device and that the mic is not clipping. |
-| Wake word fires on room noise | Keep `wakeword.require_real_context: true`; check `--wakeword` on a noise recording; raise the threshold. |
+| Wake word fires on room noise | Keep `wakeword.require_real_context: true`; check `--wakeword` on a noise recording; raise `wakeword.threshold` or `wakeword.min_consecutive_frames`. |
 | Wake fires but ASR gets a fragment | Increase `assistant.min_utterance_ms` (or `--min-utterance-ms`); inspect `--save-utterances`. |
 | Transcript is empty | Listen to the saved utterance, check peak/RMS, and try `--transcribe` on it. If the file is fine, check the ASR model and language settings on the server. |
 | No TTS audio | Try `--say "hello" --out /tmp/tts.wav`, then `--play`. Check the TTS model ID, the server's default voice, and `tts_pcm_rate`/channels. |

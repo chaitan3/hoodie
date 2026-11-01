@@ -16,6 +16,7 @@
 #include "wake/endpointer.h"
 #include "wake/vad.h"
 #include "wake/wakeword.h"
+#include "wake/wakeword_gate.h"
 
 namespace hoodie::app {
 namespace {
@@ -46,10 +47,13 @@ int run_wakeword_check(const Config& config, const std::string& audio_file,
   detector_config.require_real_context = config.wakeword.require_real_context;
 
   wake::WakeWordDetector detector(detector_config);
+  wake::WakeWordGate gate(wake::WakeWordGateOptions{
+      detector_config.threshold, config.wakeword.min_consecutive_frames});
 
   constexpr std::size_t kChunk = 1280;
   float best_score = 0.0f;
   double best_time = 0.0;
+  bool detected = false;
   std::size_t frame_index = 0;
   for (std::size_t offset = 0; offset + kChunk <= audio.samples.size(); offset += kChunk) {
     const auto score = detector.process(audio.samples.data() + offset, kChunk);
@@ -60,14 +64,15 @@ int run_wakeword_check(const Config& config, const std::string& audio_file,
         best_score = *score;
         best_time = time;
       }
+      if (gate.update(*score)) detected = true;
     }
     ++frame_index;
   }
 
-  const bool detected = best_score >= detector.threshold();
   std::cout << config.wakeword.keyword << ": max=" << best_score << " at=" << best_time
             << "s detected=" << (detected ? "yes" : "no") << "\n";
-  spdlog::info("wakeword: {} frames, threshold {:.2f}", frame_index, detector.threshold());
+  spdlog::info("wakeword: {} frames, threshold {:.2f}, {} required", frame_index,
+               detector.threshold(), gate.min_consecutive_frames());
   return 0;
 }
 

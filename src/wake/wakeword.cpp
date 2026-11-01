@@ -39,10 +39,17 @@ void WakeWordDetector::reset() {
 }
 
 std::optional<float> WakeWordDetector::process(const int16_t* samples, std::size_t frames) {
+  return process(samples, frames, {});
+}
+
+std::optional<float> WakeWordDetector::process(
+    const int16_t* samples, std::size_t frames,
+    const std::function<void(float)>& on_score) {
   pending_.insert(pending_.end(), samples, samples + frames);
   std::optional<float> last;
   while (pending_.size() >= kChunk) {
     last = process_chunk(pending_.data());
+    if (on_score) on_score(*last);
     pending_.erase(pending_.begin(), pending_.begin() + static_cast<std::ptrdiff_t>(kChunk));
   }
   return last;

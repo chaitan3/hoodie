@@ -35,6 +35,7 @@ struct ServerConfig {
 struct WakeWordConfig {
   std::string keyword = "alexa";
   double threshold = 0.75;
+  int min_consecutive_frames = 2;
   std::string melspectrogram_model = "models/melspectrogram.onnx";
   std::string embedding_model = "models/embedding_model.onnx";
   std::string keyword_model = "models/alexa_v0.1.onnx";
