@@ -153,6 +153,46 @@ size=$(stat -c%s "$WORK/live_reply.wav")
 [[ "$size" -gt 10000 ]] || fail "live: reply audio too small: $size bytes"
 pass "live ASR pipeline (reply $size bytes)"
 
+# --- LFM3 speech-to-speech workflow ------------------------------------------
+S2S_CONFIG="$WORK/live-s2s.json"
+python3 - "$LIVE_CONFIG" "$S2S_CONFIG" <<'PY'
+import json, sys
+src, dst = sys.argv[1], sys.argv[2]
+cfg = json.load(open(src))
+cfg["server"]["s2s_model"] = "lfm3-s2s"
+cfg["streaming"]["s2s_mode"] = "live"
+json.dump(cfg, open(dst, "w"))
+PY
+
+if ! "$BIN" -c "$S2S_CONFIG" --listen-wav "$WORK/listen_pause.wav" \
+    --out "$WORK/s2s_reply.wav" >"$WORK/s2s.log" 2>&1; then
+  fail "s2s pipeline failed: $(tail -1 "$WORK/s2s.log")"
+fi
+grep -q "s2s: live selected" "$WORK/s2s.log" || fail "s2s: client not selected"
+grep -q "reply: mock speech reply" "$WORK/s2s.log" || fail "s2s: missing reply text"
+[[ -s "$WORK/s2s_reply.wav" ]] || fail "s2s: no reply audio"
+size=$(stat -c%s "$WORK/s2s_reply.wav")
+[[ "$size" -gt 10000 ]] || fail "s2s: reply audio too small: $size bytes"
+pass "LFM3 S2S pipeline (reply $size bytes)"
+
+# --- S2S errors return to Idle without producing a reply ---------------------
+S2S_FAIL_CONFIG="$WORK/live-s2s-fail.json"
+python3 - "$S2S_CONFIG" "$S2S_FAIL_CONFIG" <<'PY'
+import json, sys
+src, dst = sys.argv[1], sys.argv[2]
+cfg = json.load(open(src))
+cfg["server"]["s2s_model"] = "lfm3-s2s-fail"
+json.dump(cfg, open(dst, "w"))
+PY
+rm -f "$WORK/s2s_fail.wav"
+if ! "$BIN" -c "$S2S_FAIL_CONFIG" --listen-wav "$WORK/listen_pause.wav" --once \
+    --out "$WORK/s2s_fail.wav" >"$WORK/s2s_fail.log" 2>&1; then
+  fail "s2s failure run did not return cleanly: $(tail -1 "$WORK/s2s_fail.log")"
+fi
+grep -q "s2s failed:" "$WORK/s2s_fail.log" || fail "s2s: expected failure not logged"
+[[ ! -s "$WORK/s2s_fail.wav" ]] || fail "s2s failure produced reply audio"
+pass "S2S failure returns to Idle without a reply"
+
 # --- Speculative LLM on a stable partial -------------------------------------
 SPEC_CONFIG="$WORK/speculate.json"
 python3 - "$LIVE_CONFIG" "$SPEC_CONFIG" <<'PY'

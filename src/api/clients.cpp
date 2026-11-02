@@ -7,6 +7,7 @@
 
 #include "api/asr_client.h"
 #include "api/llm_client.h"
+#include "api/s2s_client.h"
 #include "api/tts_client.h"
 
 namespace hoodie::api {
@@ -18,6 +19,7 @@ namespace {
 constexpr const char* kAsrPath = "/v1/audio/transcriptions";
 constexpr const char* kAsrLivePath = "/v1/audio/transcriptions/live";
 constexpr const char* kTtsPath = "/v1/audio/speech";
+constexpr const char* kS2sPath = "/v1/audio/speech/live";
 constexpr const char* kLlmPath = "/v1/chat/completions";
 
 }  // namespace
@@ -71,9 +73,16 @@ ClientSet make_clients(const Config& config, net::HttpClient& http) {
     spdlog::info("llm: buffered selected");
   }
 
+  if (modes.s2s_mode == "live") {
+    clients.s2s = std::make_unique<AudioCppS2sClient>(
+        http, join_url(audio_base, kS2sPath), server.s2s_model, audio_key);
+    spdlog::info("s2s: live selected");
+  }
+
   spdlog::info("clients: {}", clients.asr->description());
   spdlog::info("clients: {}", clients.tts->description());
   spdlog::info("clients: {}", clients.llm->description());
+  if (clients.s2s) spdlog::info("clients: {}", clients.s2s->description());
   return clients;
 }
 

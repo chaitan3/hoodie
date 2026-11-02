@@ -295,13 +295,14 @@ and `--norm "text"` are useful for testing individual pieces.
 
 The `streaming` block selects one transport mode per service at startup. Modes
 are independent; any combination is valid. The defaults are all `buffered` for
-conservative bring-up.
+conservative bring-up, and `s2s_mode` is `off`.
 
 ```json
 "streaming": {
   "asr_mode": "buffered",
   "tts_mode": "buffered",
-  "llm_mode": "buffered"
+  "llm_mode": "buffered",
+  "s2s_mode": "off"
 }
 ```
 
@@ -310,6 +311,44 @@ conservative bring-up.
 | ASR | Buffers the whole utterance, uploads one WAV after end-of-speech, returns one final transcript. | `asr_mode: "live"` starts a chunked PCM upload at wake, consumes SSE deltas while the user speaks, and commits at the endpoint. |
 | TTS | Splits the reply into speakable chunks and requests each chunk as a complete clip. | `tts_mode: "stream"` requests raw PCM with `stream_format=audio` and plays each response chunk as it arrives. |
 | LLM | One non-streaming chat request; the complete reply is split and spoken. | `llm_mode: "stream"` consumes SSE token deltas and feeds them to the splitter immediately. |
+| S2S | Off by default; the split ASR/LLM/TTS workflow is used. | `s2s_mode: "live"` sends the completed utterance to an LFM3-Audio S2S model and plays the streamed reply directly. |
+
+### Experimental LFM3-Audio S2S
+
+LFM3-Audio speech-to-speech is available as an experimental workflow through
+audio.cpp. It replaces ASR, the LLM agent, and TTS for live turns:
+
+```json
+"server": {
+  "audio_base_url": "http://audio-server:8080",
+  "s2s_model": "lfm3-s2s"
+},
+"streaming": {
+  "s2s_mode": "live"
+}
+```
+
+The audio.cpp server entry needs the LFM3-Audio model configured as an S2S
+streaming entry:
+
+```json
+{"id": "lfm3-s2s", "family": "lfm3_audio", "task": "s2s",
+ "mode": "streaming", "path": "models/LFM3-Audio-2B-GGUF/LFM3-Audio-2B-Q8_0.gguf"}
+```
+
+In this mode hoodie sends the completed 16 kHz utterance to
+`POST /v1/audio/speech/live`, logs the returned text, and plays the 24 kHz mono
+reply stream. `--out` writes the returned speech to a WAV. Wake word, VAD,
+endpointing, and wake-event recording are unchanged.
+
+Limitations of this first S2S path:
+
+- It is one-turn and stateless.
+- It does not run hoodie's tool loop. `--agent` remains the split text path.
+- It does not use partial ASR or speculation.
+- The reply starts after the input ends; it is not full duplex.
+- The S2S voice is the checkpoint's voice, not the TTS voice configuration.
+- `--roundtrip` remains the split ASR/agent/TTS path for now.
 
 ### What "streaming" changes
 
@@ -580,9 +619,10 @@ journalctl -u hoodie -f
 Implemented: local audio I/O and resampling, wake word with a real-context gate,
 Silero VAD and endpointing, the four-state voice loop, buffered ASR/TTS/LLM,
 live ASR with buffered replay fallback, SSE LLM streaming, raw-PCM streaming
-TTS, sentence-level pipelining, the tool loop, and optional speculative LLM
-starts.
+TTS, sentence-level pipelining, the tool loop, optional speculative LLM starts,
+and an opt-in LFM3-Audio HTTP speech-to-speech workflow.
 
-Not yet implemented: barge-in, acoustic echo cancellation, and a Realtime
-WebSocket speech-to-speech adapter. See [ARCHITECTURE.md](ARCHITECTURE.md) for
-the design and the reasoning behind the transport and fallback choices.
+Not yet implemented: barge-in, acoustic echo cancellation, full-duplex
+speech-to-speech, S2S tool calling, and a Realtime WebSocket adapter. See
+[ARCHITECTURE.md](ARCHITECTURE.md) for the design and the reasoning behind the
+transport and fallback choices.

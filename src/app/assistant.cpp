@@ -23,6 +23,7 @@
 #include "app/responder.h"
 #include "app/speculator.h"
 #include "app/wake_event_recorder.h"
+#include "audio/player.h"
 #include "audio/wav.h"
 
 namespace hoodie::app {
@@ -186,6 +187,9 @@ void Assistant::enter_listening() {
   utterance_ = audio::AudioFrame{};
   utterance_.sample_rate = capture_rate_;
   utterance_.channels = 1;
+  utterance16k_ = audio::AudioFrame{};
+  utterance16k_.sample_rate = audio::kSampleRate16k;
+  utterance16k_.channels = 1;
   utterance_ready_ = false;
   {
     std::lock_guard<std::mutex> lock(asr_text_mutex_);
@@ -198,19 +202,21 @@ void Assistant::enter_listening() {
   vad_.reset();
   endpointer_.reset();
 
-  try {
-    clients_.asr->start(cancel_, [this](const api::AsrDelta& delta) {
-      std::lock_guard<std::mutex> lock(asr_text_mutex_);
-      if (delta.is_final) {
-        asr_final_ = delta.text;
-      } else {
-        asr_partial_ = delta.text;
-      }
-    });
-  } catch (const std::exception& e) {
-    spdlog::error("asr start failed: {}", e.what());
-    reset_turn();
-    return;
+  if (!clients_.s2s) {
+    try {
+      clients_.asr->start(cancel_, [this](const api::AsrDelta& delta) {
+        std::lock_guard<std::mutex> lock(asr_text_mutex_);
+        if (delta.is_final) {
+          asr_final_ = delta.text;
+        } else {
+          asr_partial_ = delta.text;
+        }
+      });
+    } catch (const std::exception& e) {
+      spdlog::error("asr start failed: {}", e.what());
+      reset_turn();
+      return;
+    }
   }
 
   listening_since_ = std::chrono::steady_clock::now();
@@ -225,6 +231,9 @@ void Assistant::reset_turn() {
   utterance_ = audio::AudioFrame{};
   utterance_.sample_rate = capture_rate_;
   utterance_.channels = 1;
+  utterance16k_ = audio::AudioFrame{};
+  utterance16k_.sample_rate = audio::kSampleRate16k;
+  utterance16k_.channels = 1;
   // Drop queued audio so it cannot be replayed after the turn. The detector is
   // deliberately NOT reset: re-seeding its windows would re-arm the startup
   // gate after every reply. Its context is kept current by process_block() in
@@ -236,7 +245,7 @@ void Assistant::reset_turn() {
 }
 
 void Assistant::maybe_start_speculation(double now_audio) {
-  if (!options_.speculate || speculation_started_) return;
+  if (clients_.s2s || !options_.speculate || speculation_started_) return;
   if (!clients_.asr->capabilities().partials) return;
 
   std::string partial;
@@ -337,14 +346,18 @@ void Assistant::process_block(const audio::AudioFrame& mono) {
       utterance_.samples.insert(utterance_.samples.end(), mono.samples.begin(),
                                 mono.samples.end());
       if (!pcm16k_.empty()) {
+        utterance16k_.samples.insert(utterance16k_.samples.end(), pcm16k_.begin(),
+                                     pcm16k_.end());
         audio::AudioFrame pcm16;
         pcm16.sample_rate = audio::kSampleRate16k;
         pcm16.channels = 1;
         pcm16.samples = pcm16k_;
-        try {
-          clients_.asr->push(pcm16);
-        } catch (const std::exception& e) {
-          spdlog::warn("asr push failed: {}", e.what());
+        if (!clients_.s2s) {
+          try {
+            clients_.asr->push(pcm16);
+          } catch (const std::exception& e) {
+            spdlog::warn("asr push failed: {}", e.what());
+          }
         }
 
         const std::vector<float> probs = vad_.process(pcm16k_.data(), pcm16k_.size());
@@ -353,7 +366,7 @@ void Assistant::process_block(const audio::AudioFrame& mono) {
           if (p >= 0.5f) last_speech_audio_ = now_audio;
           endpointer_.push(p);
         }
-        maybe_start_speculation(now_audio);
+        if (!clients_.s2s) maybe_start_speculation(now_audio);
       }
       break;
     }
@@ -393,6 +406,96 @@ void Assistant::dump_utterance() {
                utterance_.sample_rate, utterance_.channels, utterance_.duration_seconds());
 }
 
+void Assistant::respond_s2s() {
+  audio::AudioFrame input = utterance16k_;
+  if (input.empty() && !utterance_.empty()) {
+    input = audio::resample_frame(utterance_, audio::kSampleRate16k);
+  }
+  if (input.empty()) {
+    spdlog::info("s2s: no audio captured; returning to wake word");
+    reset_turn();
+    return;
+  }
+
+  audio::AudioFrame collected;
+  std::unique_ptr<audio::AudioPlayer> player;
+  std::string text;
+  bool saw_audio = false;
+
+  const auto on_text = [&](const api::S2sTextDelta& delta) {
+    if (delta.is_final) {
+      if (!delta.text.empty()) text = delta.text;
+    } else {
+      text += delta.text;
+    }
+    if (!delta.text.empty()) spdlog::debug("s2s text: {}", delta.text);
+  };
+
+  const auto on_audio = [&](const audio::AudioFrame& chunk) {
+    if (chunk.empty()) return;
+    if (!saw_audio) {
+      saw_audio = true;
+      set_state(State::Speaking);
+    }
+    if (!options_.out_file.empty()) {
+      if (collected.samples.empty()) {
+        collected.sample_rate = chunk.sample_rate;
+        collected.channels = chunk.channels;
+      }
+      collected.samples.insert(collected.samples.end(), chunk.samples.begin(),
+                               chunk.samples.end());
+      return;
+    }
+
+    if (!player) {
+      audio::AudioPlayer::Options options;
+      options.device = options_.output_device;
+      options.sample_rate = 0;  // device default; the player resamples 24 kHz input
+      options.channels = 1;
+      player = std::make_unique<audio::AudioPlayer>(options);
+      player->start();
+    }
+    player->enqueue(chunk);
+  };
+
+  spdlog::info("s2s: {}", clients_.s2s->description());
+  try {
+    clients_.s2s->run(input, cancel_, on_text, on_audio, [] {});
+  } catch (const std::exception& error) {
+    if (player) {
+      player->stop();
+      player.reset();
+    }
+    spdlog::error("s2s failed: {}", error.what());
+    reset_turn();
+    return;
+  }
+
+  if (player) {
+    player->wait_drained();
+    player->stop();
+    player.reset();
+  }
+
+  if (!options_.out_file.empty() && !collected.samples.empty()) {
+    try {
+      audio::write_audio_file(options_.out_file, collected);
+      spdlog::info("wrote {} ({:.2f} s, {} Hz, {} ch)", options_.out_file,
+                   collected.duration_seconds(), collected.sample_rate, collected.channels);
+    } catch (const std::exception& error) {
+      spdlog::error("s2s: cannot write '{}': {}", options_.out_file, error.what());
+    }
+  }
+
+  if (text.empty()) {
+    spdlog::warn("s2s returned no text");
+  } else {
+    spdlog::info("reply: {}", text);
+  }
+  if (!saw_audio) spdlog::warn("s2s returned no audio");
+  reset_turn();
+}
+
 void Assistant::respond() {
   set_state(State::Thinking);
 
@@ -413,6 +516,11 @@ void Assistant::respond() {
       utterance_.duration_seconds(), utterance_.samples.size(), utterance_.sample_rate, peak, rms,
       ring_dropped_.load(std::memory_order_relaxed));
   dump_utterance();
+
+  if (clients_.s2s) {
+    respond_s2s();
+    return;
+  }
 
   std::string transcript;
   try {

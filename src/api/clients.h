@@ -4,6 +4,7 @@
 
 #include "api/asr_client.h"
 #include "api/llm_client.h"
+#include "api/s2s_client.h"
 #include "api/tts_client.h"
 #include "app/config.h"
 #include "net/http.h"
@@ -14,6 +15,7 @@ struct ClientSet {
   std::unique_ptr<AsrClient> asr;
   std::unique_ptr<TtsClient> tts;
   std::unique_ptr<LlmClient> llm;
+  std::unique_ptr<S2sClient> s2s;  // set only when streaming.s2s_mode == "live"
 };
 
 // Build the per-service clients from configuration. Each service selects its

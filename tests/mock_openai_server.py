@@ -7,9 +7,11 @@ the application.
   POST /chat/completions            -> {"choices":[{"message":{...}}]}
   POST /v1/audio/transcriptions     -> {"text": "..."}
   POST /v1/audio/speech             -> PCM (response_format=pcm) or WAV tone
+  POST /v1/audio/speech/live        -> SSE text deltas + base64 24 kHz PCM
   GET  /health                      -> {"status":"ok"}
 """
 import argparse
+import base64
 import json
 import math
 import struct
@@ -21,6 +23,7 @@ REPLY_TEXT = "mock reply: pong"
 FINAL_TEXT = "mock final reply"
 SPECULATIVE_TEXT = "mock speculative reply"
 TRANSCRIPT_TEXT = "mock transcript"
+S2S_TEXT = "mock speech reply"
 FAIL_LIVE = False
 
 
@@ -141,6 +144,53 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError:
                 return None
 
+    def _live_s2s(self) -> None:
+        if FAIL_LIVE or "fail" in self.path:
+            self._send_json(500, {"error": {"message": "live S2S disabled for this test"}})
+            return
+
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Transfer-Encoding", "chunked")
+        self.end_headers()
+
+        def sse(payload: dict) -> None:
+            data = ("data: " + json.dumps(payload) + "\n\n").encode()
+            self.wfile.write(f"{len(data):X}\r\n".encode() + data + b"\r\n")
+            self.wfile.flush()
+
+        while True:
+            size = self._read_chunk_size()
+            if size is None:
+                break
+            if size == 0:
+                while True:  # consume trailers
+                    trailer = self.rfile.readline()
+                    if trailer in (b"\r\n", b"\n", b""):
+                        break
+                break
+            self.rfile.read(size)
+            self.rfile.read(2)  # trailing CRLF
+
+        for i in range(0, len(S2S_TEXT), 8):
+            sse({"type": "speech.text.delta", "delta": S2S_TEXT[i : i + 8]})
+        sse({"type": "speech.text.done", "text": S2S_TEXT})
+        pcm = tone_pcm()
+        third = max(1, len(pcm) // 3)
+        for i in range(0, len(pcm), third):
+            sse(
+                {
+                    "type": "speech.audio.delta",
+                    "audio": base64.b64encode(pcm[i : i + third]).decode("ascii"),
+                }
+            )
+        sse({"type": "speech.audio.done", "timing": {"ttft_ms": 10.0}})
+        done = b"data: [DONE]\n\n"
+        self.wfile.write(f"{len(done):X}\r\n".encode() + done + b"\r\n")
+        self.wfile.write(b"0\r\n\r\n")
+        self.wfile.flush()
+
     def _live_asr(self) -> None:
         if FAIL_LIVE:
             self._send_json(500, {"error": {"message": "live ASR disabled for this test"}})
@@ -193,6 +243,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):  # noqa: N802
         if self.path.startswith("/v1/audio/transcriptions/live"):
             self._live_asr()
+            return
+        if self.path.startswith("/v1/audio/speech/live"):
+            self._live_s2s()
             return
         body = self._read_body()
         if self.path.endswith("/chat/completions"):

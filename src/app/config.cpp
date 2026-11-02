@@ -110,6 +110,7 @@ Config Config::load(const std::string& path) {
   cfg.server.asr_model = get_string(server, "asr_model", cfg.server.asr_model);
   cfg.server.tts_model = get_string(server, "tts_model", cfg.server.tts_model);
   cfg.server.llm_model = get_string(server, "llm_model", cfg.server.llm_model);
+  cfg.server.s2s_model = get_string(server, "s2s_model", cfg.server.s2s_model);
   cfg.server.tts_pcm_rate = get_int(server, "tts_pcm_rate", cfg.server.tts_pcm_rate);
   cfg.server.tts_pcm_channels = get_int(server, "tts_pcm_channels", cfg.server.tts_pcm_channels);
   cfg.server.llm_cache_prompt =
@@ -149,6 +150,7 @@ Config Config::load(const std::string& path) {
   cfg.streaming.asr_mode = get_string(streaming, "asr_mode", cfg.streaming.asr_mode);
   cfg.streaming.tts_mode = get_string(streaming, "tts_mode", cfg.streaming.tts_mode);
   cfg.streaming.llm_mode = get_string(streaming, "llm_mode", cfg.streaming.llm_mode);
+  cfg.streaming.s2s_mode = get_string(streaming, "s2s_mode", cfg.streaming.s2s_mode);
 
   apply_env_overrides(cfg);
 
@@ -190,6 +192,11 @@ Config Config::load(const std::string& path) {
   valid_mode(cfg.streaming.asr_mode, {"buffered", "live"}, "streaming.asr_mode");
   valid_mode(cfg.streaming.tts_mode, {"buffered", "stream"}, "streaming.tts_mode");
   valid_mode(cfg.streaming.llm_mode, {"buffered", "stream"}, "streaming.llm_mode");
+  valid_mode(cfg.streaming.s2s_mode, {"off", "live"}, "streaming.s2s_mode");
+  if (cfg.streaming.s2s_mode == "live" && cfg.server.s2s_model.empty()) {
+    throw std::runtime_error(
+        "config: server.s2s_model must be set when streaming.s2s_mode is live");
+  }
   return cfg;
 }
 
@@ -231,12 +238,15 @@ std::string Config::summary() const {
       << "  server.asr_model      = " << server.asr_model << "\n"
       << "  server.tts_model      = " << server.tts_model << "\n"
       << "  server.llm_model      = " << server.llm_model << "\n"
+      << "  server.s2s_model      = "
+      << (server.s2s_model.empty() ? "<off>" : server.s2s_model) << "\n"
       << "  server.tts_pcm        = " << server.tts_pcm_rate << " Hz, "
       << server.tts_pcm_channels << " ch\n"
       << "  server.llm_cache_prompt = " << (server.llm_cache_prompt ? "true" : "false") << "\n"
       << "  streaming.asr_mode    = " << streaming.asr_mode << "\n"
       << "  streaming.tts_mode    = " << streaming.tts_mode << "\n"
       << "  streaming.llm_mode    = " << streaming.llm_mode << "\n"
+      << "  streaming.s2s_mode    = " << streaming.s2s_mode << "\n"
       << "  wakeword.keyword      = " << wakeword.keyword
       << "  (threshold=" << wakeword.threshold
       << ", frames=" << wakeword.min_consecutive_frames

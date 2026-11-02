@@ -19,6 +19,7 @@ struct ServerConfig {
   std::string asr_model = "small";
   std::string tts_model = "tts-1";
   std::string llm_model = "qwen3.5-4b";
+  std::string s2s_model;  // empty = split ASR/LLM/TTS workflow
 
   int tts_pcm_rate = 24000;    // raw streamed PCM has no header
   int tts_pcm_channels = 1;
@@ -71,6 +72,7 @@ struct StreamingConfig {
   std::string asr_mode = "buffered";  // buffered | live
   std::string tts_mode = "buffered";  // buffered | stream
   std::string llm_mode = "buffered";  // buffered | stream
+  std::string s2s_mode = "off";       // off | live
 };
 
 struct Config {

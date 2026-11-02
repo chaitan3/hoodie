@@ -69,7 +69,7 @@ from the selected transport mode rather than configured separately.
 | Detection | `src/wake/endpointer.h` | VAD probabilities -> speech start/end events. |
 | ML | `src/ml/onnx.*` | ONNX Runtime RAII wrapper and tensor helpers. |
 | Network | `src/net/http.*`, `sse.*` | libcurl request variants and incremental SSE parsing. |
-| API clients | `src/api/` | ASR/TTS/LLM interfaces, buffered and streaming implementations, OpenAI types. |
+| API clients | `src/api/` | ASR/TTS/LLM/S2S interfaces, buffered and streaming implementations, OpenAI types. |
 | Agent | `src/agent/agent.*`, `tool_registry.*`, `tools.*` | Tool-calling loop, JSON schemas, built-in tools. |
 | Agent | `src/agent/sentence_splitter.*`, `text_normalize.*` | Speakable chunking and TTS text cleanup. |
 | Utility | `src/util/` | Cancellation token, logging, shell-free subprocess runner. |
@@ -109,10 +109,12 @@ The state enum is `Idle`, `Listening`, `Thinking`, and `Speaking`.
 3. **Thinking.** `respond()` commits the ASR stream, obtains the final
    transcript, optionally confirms or discards a speculative LLM answer, and
    runs the tool-calling agent. The responder may already be synthesizing text
-   while the agent is still producing tokens.
-4. **Speaking.** The first TTS audio chunk (played or written) transitions to
-   `Speaking`. Playback continues until the responder finishes and the player
-   drains.
+   while the agent is still producing tokens. When `s2s_mode` is `"live"`,
+   `respond()` instead sends the captured 16 kHz utterance directly to the S2S
+   client and bypasses ASR, the agent, and TTS.
+4. **Speaking.** The first TTS or S2S audio chunk (played or written)
+   transitions to `Speaking`. Playback continues until the responder or S2S
+   stream finishes and the player drains.
 5. **Reset.** The turn stops ASR and speculation, clears the capture ring and
    utterance, resets VAD/endpointer, and returns to `Idle`. The wake detector is
    intentionally not reset: re-seeding its windows would re-arm the startup
@@ -294,7 +296,30 @@ stops at the step limit and logs a warning.
 `server.llm_cache_prompt` adds llama.cpp's `cache_prompt` extension to SSE
 requests. Other OpenAI-compatible servers may ignore the field.
 
-## 8. TTS pipeline
+## 8. LFM3-Audio S2S (experimental)
+
+`streaming.s2s_mode: "live"` selects an optional speech-to-speech workflow using
+audio.cpp's `lfm3_audio` family. It is off by default; the split ASR/LLM/TTS
+path remains the normal workflow.
+
+```text
+Listening -> send completed 16 kHz utterance
+          -> POST /v1/audio/speech/live  (chunked s16le)
+          -> SSE speech.text.delta / speech.audio.delta
+          -> play 24 kHz PCM and log text
+          -> Idle
+```
+
+`AudioCppS2sClient` reuses the chunked request and SSE transport shape of live
+ASR. It bypasses `AsrClient`, `Agent`, `Responder`, and `TtsClient`; the reply's
+text is logged and the audio goes directly to the player or `--out`.
+
+This path is intentionally one-turn and has no tool loop. It also does not
+provide live ASR partials, speculation, or full-duplex barge-in. The model's
+S2S reply starts after the input ends. `--agent` and `--roundtrip` remain on
+the split path.
+
+## 9. TTS pipeline
 
 `Responder` turns the LLM stream into speech without waiting for the whole reply:
 
@@ -322,7 +347,7 @@ the first chunk, so `--say`/`--out` paths do not need an audio device.
 removes characters that should not be spoken. It is applied per chunk in the
 live responder and to the whole reply in the one-shot commands.
 
-## 9. Speculative LLM
+## 10. Speculative LLM
 
 Speculation targets the gap between the last ASR partial and the final
 transcript:
@@ -344,7 +369,7 @@ This is a latency optimization, not a correctness dependency. It can double LLM
 work on turns where the final transcript changes, which is why it is off by
 default.
 
-## 10. Concurrency and cancellation
+## 11. Concurrency and cancellation
 
 | Thread / callback | Work |
 |---|---|
@@ -377,14 +402,14 @@ cancellation: otherwise the microphone hears the assistant and interrupts it.
 The `CancelToken` and player/HTTP stop paths are the foundation for that future
 work.
 
-## 11. Configuration
+## 12. Configuration
 
 The config is JSON. The top-level blocks are:
 
 | Block | Purpose |
 |---|---|
-| `server` | Base URLs, default/per-service API keys, model IDs, TTS PCM format, LLM prompt cache. |
-| `streaming` | Only `asr_mode`, `tts_mode`, `llm_mode`. |
+| `server` | Base URLs, default/per-service API keys, ASR/TTS/LLM/S2S model IDs, TTS PCM format, LLM prompt cache. |
+| `streaming` | Only `asr_mode`, `tts_mode`, `llm_mode`, `s2s_mode`. |
 | `wakeword` | Keyword, threshold, consecutive-frame gate, ONNX model paths, warm-up, real-context gate. |
 | `audio` | Input/output device and capture sample rate. |
 | `assistant` | Minimum utterance, listen timeout, speculation tuning. |
@@ -395,7 +420,9 @@ Design rules:
   `llm_base_url` override it per service. `base_url` may be empty if both
   overrides are present.
 - `api_key` is the default. `audio_api_key` and `llm_api_key` override it for
-  ASR/TTS and LLM respectively.
+  ASR/TTS/S2S and LLM respectively.
+- `server.s2s_model` is required when `streaming.s2s_mode` is `"live"`; S2S uses
+  the audio host and audio key.
 - Endpoint paths are protocol details derived from the mode. There are no
   `*_path` fields.
 - There is no capability probe block. The selected mode determines which path
@@ -411,7 +438,7 @@ Design rules:
 Mode is fixed for the process lifetime. Changing it requires a restart, which
 keeps each turn's transport behavior predictable.
 
-## 12. Design decisions and tradeoffs
+## 13. Design decisions and tradeoffs
 
 | Decision | Why | Cost |
 |---|---|---|
@@ -426,13 +453,15 @@ keeps each turn's transport behavior predictable.
 | Speculation is opt-in and match-checked | Can hide some ASR finalization latency without risking wrong tools/audio. | Extra LLM work; only useful with live ASR partials. |
 | 16 kHz wake/VAD/ASR, capture at device rate | Keeps detection and ASR bandwidth/compute low while preserving a clean capture for buffered ASR and diagnostics. | Two resampling stages and careful stateful resampler handling. |
 | Wake real-context gate, consecutive-frame gate, and minimum utterance | These address observed startup/tail and transient false positives rather than papering over them with a higher threshold. | Adds a short startup delay and one 80 ms frame of trigger latency; replay fixtures need lead-in audio. |
+| LFM3-Audio S2S is opt-in and one-turn | Tests the end-to-end speech model without destabilizing the tool-capable split workflow. | No tools, partial ASR, speculation, or full-duplex barge-in; the split path stays default. |
 | JSON config with derived paths | One source of truth for hosts/keys/models; no duplicated endpoint settings. | Changing a server's protocol requires a code change, not just a config edit. |
 | Shell test suites + mock server | Tests run on the target and exercise the real HTTP/audio state machine without a live model server. | Not integrated with CTest; needs Python/curl and free ports. |
 
-## 13. Failure handling and observability
+## 14. Failure handling and observability
 
-- ASR/TTS/LLM errors throw `ApiError` or `std::runtime_error`; the turn catches
-  them, aborts the responder, resets the turn, and returns to wake.
+- ASR/TTS/LLM/S2S errors throw `ApiError` or `std::runtime_error`; the turn
+  catches them, aborts the responder/player, resets the turn, and returns to
+  wake.
 - Live ASR errors include the HTTP status, response body, and a proxy-specific
   hint when the server reports a non-incremental body.
 - TTS errors stop the responder; the player is stopped and the turn is reset.
@@ -447,7 +476,7 @@ keeps each turn's transport behavior predictable.
   keeps disk I/O off the audio loop; the recorder is disabled unless requested.
 - The config summary prints hosts and models with redacted keys.
 
-## 14. Testing strategy
+## 15. Testing strategy
 
 The core is tested without a microphone:
 
@@ -460,19 +489,19 @@ The core is tested without a microphone:
 - `tests/integration.sh` covers buffered ASR/TTS/LLM, SSE LLM, streaming PCM TTS,
   live ASR, live-to-buffered fallback, and a dead server.
 - `tests/listen_test.sh` replays generated WAVs through the full state machine:
-  a normal turn, a pause after wake, streaming services, live ASR, matched and
-  mismatched speculation, tiny input blocks, silence rejection, and wake-event
-  recording.
+  a normal turn, a pause after wake, streaming services, live ASR, LFM3 S2S,
+  matched and mismatched speculation, tiny input blocks, silence rejection, and
+  wake-event recording.
 
 The mock server (`tests/mock_openai_server.py`) implements the relevant
-OpenAI-compatible endpoints plus a scripted live ASR stream and a `--fail-live`
-mode. The WAV fixtures are generated deterministically by the shell tests; the
-wake clip is downloaded by `scripts/fetch_models.sh`.
+OpenAI-compatible endpoints plus scripted live ASR and LFM3 S2S streams and a
+`--fail-live` mode. The WAV fixtures are generated deterministically by the
+shell tests; the wake clip is downloaded by `scripts/fetch_models.sh`.
 
 Hardware checks remain manual: `--list-devices`, `--record`, `--play`, and a
 live `--listen` run with `--save-utterances`.
 
-## 15. Legacy and inherited fixes
+## 16. Legacy and inherited fixes
 
 The original Python client is kept under `legacy/` for reference and is not
 built. The C++ port deliberately does not carry forward these defects:
@@ -488,7 +517,7 @@ built. The C++ port deliberately does not carry forward these defects:
 | `shell=True` for `yt-dlp` | `execvp` with argument vectors; no shell. |
 | No cancellation | `CancelToken` and explicit stop paths for HTTP, ASR, TTS, and playback. |
 
-## 16. Future work
+## 17. Future work
 
 - **Barge-in and AEC.** Add echo cancellation before consuming microphone audio
   during playback; then cancel ASR/LLM/TTS and flush the player on a new wake or

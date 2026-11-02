@@ -33,6 +33,7 @@ add_executable(hoodie
   src/net/sse.cpp
   src/api/asr_client.cpp
   src/api/tts_client.cpp
+  src/api/s2s_client.cpp
   src/api/llm_client.cpp
   src/api/openai_types.cpp
   src/api/clients.cpp

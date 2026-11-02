@@ -88,6 +88,7 @@ class Assistant {
   void enter_listening();
   void reset_turn();
   void respond();
+  void respond_s2s();
   void dump_utterance();
   void maybe_start_speculation(double now_audio);
   void stop_speculation();
@@ -114,7 +115,8 @@ class Assistant {
   std::unique_ptr<audio::Resampler> to_16k_;
   std::unique_ptr<audio::AudioCapture> capture_;
 
-  audio::AudioFrame utterance_;  // mono, at the capture rate
+  audio::AudioFrame utterance_;    // mono, at the capture rate
+  audio::AudioFrame utterance16k_;  // mono 16 kHz copy for S2S
   int capture_rate_ = 0;
   int capture_channels_ = 1;
   mutable std::mutex asr_text_mutex_;
